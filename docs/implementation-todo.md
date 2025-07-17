@@ -23,23 +23,8 @@ Full-featured QR code generator, management platform, and analytics dashboard su
   - [ ] Organization/team management
   - **Priority**: High | **Effort**: 3-4 days
 
-#### Database Schema & Models
 
-- [ ] **DB-001**: Design comprehensive database schema
-  - [ ] Users table with profile information
-  - [ ] QR codes table (static/dynamic)
-  - [ ] Templates table with customization options
-  - [ ] Analytics events table (time-series)
-  - [ ] Folders/categories table
-  - [ ] Organizations/teams table
-  - **Priority**: High | **Effort**: 2-3 days
 
-- [ ] **DB-002**: Implement Drizzle ORM models
-  - [ ] All table definitions
-  - [ ] Relationships and foreign keys
-  - [ ] Indexes for performance
-  - [ ] Migration scripts
-  - **Priority**: High | **Effort**: 2-3 days
 
 #### QR Code Generation Engine
 

@@ -505,3 +505,229 @@ export const DEFAULT_MEMBER_PERMISSIONS: OrganizationMemberPermissions = {
   canManageUsers: false,
   canManageSettings: false,
 } as const; 
+
+// ================================
+// QR CODE GENERATION TYPES
+// ================================
+
+// Error correction levels
+export type ErrorCorrectionLevel = "L" | "M" | "Q" | "H";
+
+// QR code formats
+export type QRCodeFormat = "png" | "svg" | "jpeg" | "pdf";
+
+// QR code generation mode
+export type QRCodeMode = "static" | "dynamic";
+
+// QR code generation request
+export interface QRCodeGenerationRequest {
+  type: QRCodeType;
+  mode: QRCodeMode;
+  data: QRCodeData;
+  options: {
+    errorCorrection: ErrorCorrectionLevel;
+    size: number;
+    format: QRCodeFormat;
+    customization?: QRCodeStyle;
+  };
+  metadata?: {
+    name?: string;
+    description?: string;
+    folderId?: string;
+    templateId?: string;
+    tags?: string[];
+    expiresAt?: Date;
+  };
+}
+
+// QR code generation response
+export interface QRCodeGenerationResponse {
+  id: string;
+  qrCodeUrl: string;
+  shortUrl?: string; // For dynamic QR codes
+  metadata: {
+    type: QRCodeType;
+    mode: QRCodeMode;
+    size: number;
+    format: QRCodeFormat;
+    errorCorrection: ErrorCorrectionLevel;
+    fileSize: number;
+    version: number; // QR code version (1-40)
+    modules: number; // Number of modules per side
+  };
+  createdAt: Date;
+}
+
+// Short URL generation
+export interface ShortUrlData {
+  shortCode: string;
+  originalData: string;
+  qrType: QRCodeType;
+  qrCodeId: string;
+  userId: string;
+  expiresAt?: Date;
+}
+
+// QR code validation result
+export interface QRCodeValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  estimatedSize: number;
+  recommendedErrorCorrection: ErrorCorrectionLevel;
+}
+
+// Analytics event for QR code scanning
+export interface QRCodeScanEvent {
+  qrCodeId: string;
+  sessionId: string;
+  timestamp: Date;
+  userAgent?: string;
+  ipAddress?: string;
+  referer?: string;
+  location?: {
+    country?: string;
+    region?: string;
+    city?: string;
+    latitude?: number;
+    longitude?: number;
+  };
+  device?: {
+    type: "mobile" | "tablet" | "desktop";
+    os?: string;
+    browser?: string;
+    version?: string;
+  };
+}
+
+// QR code data limits by type
+export interface QRCodeLimits {
+  maxLength: number;
+  recommendedErrorCorrection: ErrorCorrectionLevel;
+  requiredFields: string[];
+  optionalFields: string[];
+}
+
+// QR code type configuration
+export interface QRCodeTypeConfig {
+  [key in QRCodeType]: QRCodeLimits;
+}
+
+// ================================
+// QR CODE CONSTANTS
+// ================================
+
+export const QR_CODE_LIMITS: QRCodeTypeConfig = {
+  url: {
+    maxLength: 2000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["url"],
+    optionalFields: [],
+  },
+  vcard: {
+    maxLength: 1000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["firstName", "lastName"],
+    optionalFields: ["organization", "title", "email", "phone", "website", "address"],
+  },
+  wifi: {
+    maxLength: 500,
+    recommendedErrorCorrection: "H",
+    requiredFields: ["ssid", "password", "security"],
+    optionalFields: ["hidden"],
+  },
+  text: {
+    maxLength: 2000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["text"],
+    optionalFields: [],
+  },
+  sms: {
+    maxLength: 500,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["phone", "message"],
+    optionalFields: [],
+  },
+  email: {
+    maxLength: 1000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["to"],
+    optionalFields: ["subject", "body"],
+  },
+  phone: {
+    maxLength: 50,
+    recommendedErrorCorrection: "H",
+    requiredFields: ["phone"],
+    optionalFields: [],
+  },
+  location: {
+    maxLength: 200,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["latitude", "longitude"],
+    optionalFields: ["address"],
+  },
+  event: {
+    maxLength: 1500,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["title", "startDate"],
+    optionalFields: ["description", "location", "endDate", "allDay"],
+  },
+  app_download: {
+    maxLength: 500,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["appName", "androidUrl", "iosUrl"],
+    optionalFields: ["fallbackUrl"],
+  },
+  multi_url: {
+    maxLength: 2000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["links"],
+    optionalFields: ["title", "description"],
+  },
+  menu: {
+    maxLength: 3000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["restaurantName", "categories"],
+    optionalFields: [],
+  },
+  payment: {
+    maxLength: 500,
+    recommendedErrorCorrection: "H",
+    requiredFields: ["type", "address"],
+    optionalFields: ["amount", "currency", "note"],
+  },
+  pdf: {
+    maxLength: 1000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["fileUrl"],
+    optionalFields: ["title", "description"],
+  },
+  image: {
+    maxLength: 1000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["imageUrl"],
+    optionalFields: ["title", "description"],
+  },
+  video: {
+    maxLength: 1000,
+    recommendedErrorCorrection: "M",
+    requiredFields: ["videoUrl"],
+    optionalFields: ["title", "description"],
+  },
+};
+
+// Error correction level details
+export const ERROR_CORRECTION_LEVELS = {
+  L: { name: "Low", recovery: "~7%", description: "Suitable for clean environments" },
+  M: { name: "Medium", recovery: "~15%", description: "Balanced option for most use cases" },
+  Q: { name: "Quartile", recovery: "~25%", description: "Good for environments with some damage" },
+  H: { name: "High", recovery: "~30%", description: "Best for harsh environments or logo embedding" },
+} as const;
+
+// QR code size recommendations
+export const QR_CODE_SIZES = {
+  small: 256,
+  medium: 512,
+  large: 1024,
+  xlarge: 2048,
+} as const; 
