@@ -23,6 +23,7 @@ import { nanoid } from "nanoid";
  */
 export class QRCodeGenerationService {
   private static instance: QRCodeGenerationService;
+  private qrCodeCache: Map<string, Buffer> = new Map();
   
   private constructor() {}
   
@@ -116,13 +117,19 @@ export class QRCodeGenerationService {
     content: string,
     options: QRCodeGenerationRequest["options"]
   ): Promise<Buffer> {
+    if (options.format === "svg") {
+      // For SVG, generate as string and convert to buffer
+      const svg = await this.generateQRCodeSVG(content, options);
+      return Buffer.from(svg, 'utf8');
+    }
+    
     const qrOptions: QRCode.QRCodeToBufferOptions = {
-      type: this.getQRCodeType(options.format),
+      type: "png",
       width: options.size,
       margin: 2,
       color: {
-        dark: options.customization?.foregroundColor || "#000000",
-        light: options.customization?.backgroundColor || "#ffffff",
+        dark: options.customization?.foregroundColor ?? "#000000",
+        light: options.customization?.backgroundColor ?? "#ffffff",
       },
       errorCorrectionLevel: options.errorCorrection,
     };
@@ -142,13 +149,13 @@ export class QRCodeGenerationService {
     content: string,
     options: QRCodeGenerationRequest["options"]
   ): Promise<string> {
-    const qrOptions: QRCode.QRCodeToSVGOptions = {
-      type: "svg",
+    const qrOptions = {
+      type: "svg" as const,
       width: options.size,
       margin: 2,
       color: {
-        dark: options.customization?.foregroundColor || "#000000",
-        light: options.customization?.backgroundColor || "#ffffff",
+        dark: options.customization?.foregroundColor ?? "#000000",
+        light: options.customization?.backgroundColor ?? "#ffffff",
       },
       errorCorrectionLevel: options.errorCorrection,
     };
@@ -203,9 +210,54 @@ export class QRCodeGenerationService {
     qrCodeId: string,
     format: QRCodeFormat
   ): Promise<string> {
-    // This would be implemented with actual file storage service (S3, etc.)
-    // For now, return a placeholder URL
-    return `${process.env.NEXT_PUBLIC_BASE_URL}/api/qr/image/${qrCodeId}.${format}`;
+    // Store the buffer in memory cache for now
+    // In production, you would store this in a file system, S3, etc.
+    this.qrCodeCache.set(qrCodeId, buffer);
+    
+    return `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/api/qr/image/${qrCodeId}.${format}`;
+  }
+
+  /**
+   * Generates QR code buffer for a stored QR code
+   */
+  public async generateQRCodeBuffer(qrCode: {
+    id: string;
+    type: QRCodeType;
+    isDynamic: boolean;
+    dynamicUrl?: string | null;
+    data: QRCodeData;
+    errorCorrection: string;
+    size: number;
+    format: string;
+    style?: any;
+  }): Promise<Buffer> {
+    // Check if we have it in cache first
+    if (this.qrCodeCache.has(qrCode.id)) {
+      return this.qrCodeCache.get(qrCode.id)!;
+    }
+
+    // Regenerate the QR code buffer
+    let contentToEncode: string;
+    
+    if (qrCode.isDynamic && qrCode.dynamicUrl) {
+      contentToEncode = qrCode.dynamicUrl;
+    } else {
+      contentToEncode = convertDataToQRString(qrCode.type, qrCode.data);
+    }
+
+    const options = {
+      errorCorrection: qrCode.errorCorrection as ErrorCorrectionLevel,
+      size: qrCode.size,
+      format: qrCode.format as QRCodeFormat,
+      customization: qrCode.style ?? undefined,
+    };
+
+    const buffer = await this.generateQRCodeImage(contentToEncode, options);
+
+    // Cache the regenerated buffer
+    this.qrCodeCache.set(qrCode.id, buffer);
+    
+    return buffer;
   }
   
   /**
