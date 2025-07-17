@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { 
-  QRCodeData, 
-  QRCodeType, 
-  QRCodeValidationResult, 
-  QR_CODE_LIMITS, 
-  ErrorCorrectionLevel 
+  type QRCodeData, 
+  type QRCodeType, 
+  type QRCodeValidationResult, 
+  type ErrorCorrectionLevel,
+  QR_CODE_LIMITS
 } from "@/server/db/types";
 
 // ================================
@@ -203,7 +203,7 @@ export function validateQRCodeData(type: QRCodeType, data: QRCodeData): QRCodeVa
         emailSchema.parse(data);
         break;
       case "phone":
-        phoneSchema.parse({ phone: data.phone });
+        phoneSchema.parse({ phone: (data as any).phone });
         break;
       case "location":
         locationSchema.parse(data);
@@ -212,7 +212,7 @@ export function validateQRCodeData(type: QRCodeType, data: QRCodeData): QRCodeVa
         eventSchema.parse(data);
         break;
       case "app_download":
-        appDownloadSchema.parse({ appDownload: data.appDownload });
+        appDownloadSchema.parse({ appDownload: (data as any).appDownload });
         break;
       case "multi_url":
         multiUrlSchema.parse(data);
@@ -233,7 +233,7 @@ export function validateQRCodeData(type: QRCodeType, data: QRCodeData): QRCodeVa
         videoSchema.parse(data);
         break;
       default:
-        errors.push(`Unsupported QR code type: ${type}`);
+        errors.push(`Unsupported QR code type: ${type as string}`);
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -333,7 +333,7 @@ export function validateCharacterEncoding(data: string): {
 export function recommendErrorCorrection(
   type: QRCodeType,
   useCase: "print" | "digital" | "harsh" = "digital",
-  hasLogo: boolean = false
+  hasLogo = false
 ): ErrorCorrectionLevel {
   const baseLimits = QR_CODE_LIMITS[type];
   let recommended = baseLimits.recommendedErrorCorrection;
@@ -360,8 +360,13 @@ export function recommendErrorCorrection(
 /**
  * Gets nested value from object using dot notation
  */
-function getNestedValue(obj: any, path: string): any {
-  return path.split('.').reduce((current, key) => current?.[key], obj);
+function getNestedValue(obj: Record<string, unknown> | QRCodeData, path: string): unknown {
+  return path.split('.').reduce((current: unknown, key: string) => {
+    if (current && typeof current === 'object' && key in current) {
+      return (current as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, obj);
 }
 
 /**
@@ -381,8 +386,12 @@ export function estimateQRCodeVersion(
 
   const capacities = capacityTable[errorCorrection];
   
+  if (!capacities) {
+    return 40; // Maximum QR version for unknown error correction
+  }
+  
   for (let i = 0; i < capacities.length; i++) {
-    if (dataLength <= capacities[i]) {
+    if (capacities[i] && dataLength <= capacities[i]) {
       return i + 1; // QR versions are 1-indexed
     }
   }

@@ -17,6 +17,8 @@ interface QRCodeGeneratorProps {
   data: any;
   type: string;
   mode?: "static" | "dynamic";
+  shouldGenerate?: boolean;
+  onGenerationComplete?: () => void;
   options?: {
     errorCorrection?: "L" | "M" | "Q" | "H";
     size?: number;
@@ -45,6 +47,8 @@ export function QRCodeGenerator({
   data,
   type,
   mode = "static",
+  shouldGenerate = true,
+  onGenerationComplete,
   options = {},
   metadata = {},
 }: QRCodeGeneratorProps) {
@@ -60,6 +64,7 @@ export function QRCodeGenerator({
       setGeneratedQRCode(result);
       setIsGenerating(false);
       toast.success("QR code generated successfully!");
+      onGenerationComplete?.();
     },
     onError: (error) => {
       console.error("QR generation failed:", error);
@@ -68,16 +73,61 @@ export function QRCodeGenerator({
     },
   });
 
+  // Transform raw data into proper QR code data structure
+  const transformDataForQRType = (rawData: any, qrType: string) => {
+    if (!rawData) return {};
+
+    switch (qrType) {
+      case "url":
+        return typeof rawData === "string" ? { url: rawData } : rawData;
+      case "text":
+        return typeof rawData === "string" ? { text: rawData } : rawData;
+      case "phone":
+        return typeof rawData === "string" ? { phone: rawData } : rawData;
+      case "vcard":
+        return rawData.vcard ? rawData : { vcard: rawData };
+      case "wifi":
+        return rawData.wifi ? rawData : { wifi: rawData };
+      case "sms":
+        return rawData.sms ? rawData : { sms: rawData };
+      case "email":
+        return rawData.email ? rawData : { email: rawData };
+      case "location":
+        return rawData.location ? rawData : { location: rawData };
+      case "event":
+        return rawData.event ? rawData : { event: rawData };
+      case "app_download":
+        return rawData.appDownload ? rawData : { appDownload: rawData };
+      case "multi_url":
+        return rawData.multiUrl ? rawData : { multiUrl: rawData };
+      case "menu":
+        return rawData.menu ? rawData : { menu: rawData };
+      case "payment":
+        return rawData.payment ? rawData : { payment: rawData };
+      case "pdf":
+        return rawData.pdf ? rawData : { pdf: rawData };
+      case "image":
+        return rawData.image ? rawData : { image: rawData };
+      case "video":
+        return rawData.video ? rawData : { video: rawData };
+      default:
+        return rawData;
+    }
+  };
+
   const generateQRCode = async () => {
     if (!data || !type) return;
 
     setIsGenerating(true);
 
     try {
+      // Transform the data into the proper structure
+      const transformedData = transformDataForQRType(data, type);
+
       await generateQRMutation.mutateAsync({
         type: type as any,
         mode,
-        data,
+        data: transformedData,
         options: {
           errorCorrection: options.errorCorrection || "M",
           size: options.size || 512,
@@ -93,10 +143,10 @@ export function QRCodeGenerator({
 
   // Auto-generate when data changes
   useEffect(() => {
-    if (data && type) {
+    if (data && type && shouldGenerate) {
       generateQRCode();
     }
-  }, [data, type, mode]);
+  }, [data, type, mode, shouldGenerate]);
 
   const downloadQR = (format: string = "png") => {
     if (qrCodeUrl) {

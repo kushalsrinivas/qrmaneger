@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { 
+import type { 
   QRCodeData, 
   QRCodeType, 
   QRCodeGenerationRequest, 
@@ -11,6 +11,7 @@ import {
 } from "@/server/db/types";
 import { validateQRCodeData } from "@/lib/qr-validation";
 import { convertDataToQRString } from "@/lib/qr-handlers";
+import { shortUrlService } from "@/lib/short-url-service";
 import { nanoid } from "nanoid";
 
 // ================================
@@ -54,8 +55,8 @@ export class QRCodeGenerationService {
       
       if (request.mode === "dynamic") {
         // For dynamic QR codes, generate a short URL
-        const shortCode = await this.generateShortCode();
-        shortUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/q/${shortCode}`;
+        const shortCode = await shortUrlService.generateShortCode();
+        shortUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/q/${shortCode}`;
         contentToEncode = shortUrl;
         
         // Store the dynamic QR code data (this would be handled by the database layer)

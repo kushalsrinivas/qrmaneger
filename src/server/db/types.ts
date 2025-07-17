@@ -609,7 +609,7 @@ export interface QRCodeLimits {
 }
 
 // QR code type configuration
-export interface QRCodeTypeConfig {
+export type QRCodeTypeConfig = {
   [key in QRCodeType]: QRCodeLimits;
 }
 

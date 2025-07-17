@@ -28,6 +28,13 @@ export default function GeneratePage() {
   const [qrType, setQrType] = useState("url");
   const [isDynamic, setIsDynamic] = useState(true);
   const [qrData, setQrData] = useState("");
+  const [shouldGenerate, setShouldGenerate] = useState(false);
+
+  const handleGenerateClick = () => {
+    if (qrData.trim()) {
+      setShouldGenerate(true);
+    }
+  };
 
   return (
     <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
@@ -169,7 +176,13 @@ export default function GeneratePage() {
                 </TabsContent>
               </Tabs>
 
-              <Button className="w-full">Generate QR Code</Button>
+              <Button
+                className="w-full"
+                onClick={handleGenerateClick}
+                disabled={!qrData.trim()}
+              >
+                Generate QR Code
+              </Button>
             </CardContent>
           </Card>
 
@@ -177,7 +190,12 @@ export default function GeneratePage() {
         </div>
 
         <div className="space-y-6">
-          <QRCodeGenerator data={qrData} type={qrType} />
+          <QRCodeGenerator
+            data={qrData}
+            type={qrType}
+            shouldGenerate={shouldGenerate}
+            onGenerationComplete={() => setShouldGenerate(false)}
+          />
         </div>
       </div>
     </div>
