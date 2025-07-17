@@ -13,33 +13,143 @@ import {
 
 // URL validation schema
 const urlSchema = z.object({
-  url: z.string().url("Invalid URL format").max(2000, "URL too long"),
+  url: z.string()
+    .min(1, "URL is required")
+    .max(2953, "URL exceeds QR code character limit (2,953 characters)")
+    .refine((url) => {
+      // Add protocol if missing for validation
+      const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
+        ? url 
+        : `https://${url}`;
+      
+      try {
+        const urlObj = new URL(urlWithProtocol);
+        
+        // Validate protocol
+        if (!["http:", "https:"].includes(urlObj.protocol)) {
+          return false;
+        }
+        
+        // Validate domain (basic check)
+        if (!urlObj.hostname || urlObj.hostname.length < 1) {
+          return false;
+        }
+        
+        // Check for dangerous domains (basic blacklist)
+        const dangerousDomains = [
+          "malware.com", "phishing.com", "scam.com", "spam.com",
+          "bit.ly/malware", "tinyurl.com/malware"
+        ];
+        
+        if (dangerousDomains.some(domain => urlObj.hostname.includes(domain))) {
+          return false;
+        }
+        
+        // Prevent javascript: and data: URLs
+        if (urlObj.protocol === "javascript:" || urlObj.protocol === "data:") {
+          return false;
+        }
+        
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid URL format or contains dangerous content"),
 });
 
 // vCard validation schema
 const vcardSchema = z.object({
   vcard: z.object({
+    // Required fields (FN)
     firstName: z.string().min(1, "First name is required").max(50, "First name too long"),
     lastName: z.string().min(1, "Last name is required").max(50, "Last name too long"),
+    
+    // Standard vCard fields
     organization: z.string().max(100, "Organization name too long").optional(),
     title: z.string().max(100, "Title too long").optional(),
     email: z.string().email("Invalid email format").max(100, "Email too long").optional(),
     phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone format").optional(),
     website: z.string().url("Invalid website URL").max(200, "Website URL too long").optional(),
     address: z.string().max(200, "Address too long").optional(),
+    
+    // Extended fields (vCard Plus)
+    // Social Media
+    linkedin: z.string().url("Invalid LinkedIn URL").max(200, "LinkedIn URL too long").optional(),
+    twitter: z.string().max(50, "Twitter handle too long").optional(),
+    instagram: z.string().max(50, "Instagram username too long").optional(),
+    facebook: z.string().url("Invalid Facebook URL").max(200, "Facebook URL too long").optional(),
+    
+    // Additional Contact Methods
+    whatsapp: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid WhatsApp number format").optional(),
+    skype: z.string().max(50, "Skype username too long").optional(),
+    telegram: z.string().max(50, "Telegram handle too long").optional(),
+    
+    // Professional Info
+    department: z.string().max(100, "Department name too long").optional(),
+    assistant: z.string().max(100, "Assistant name too long").optional(),
+    assistantPhone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid assistant phone format").optional(),
+    companyLogo: z.string().url("Invalid company logo URL").max(500, "Company logo URL too long").optional(),
+    
+    // Additional fields
+    middleName: z.string().max(50, "Middle name too long").optional(),
+    nickname: z.string().max(50, "Nickname too long").optional(),
+    birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid birthday format (YYYY-MM-DD)").optional(),
+    anniversary: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid anniversary format (YYYY-MM-DD)").optional(),
+    note: z.string().max(500, "Note too long").optional(),
+    
+    // Address components (structured)
+    addressComponents: z.object({
+      street: z.string().max(100, "Street too long").optional(),
+      city: z.string().max(50, "City too long").optional(),
+      state: z.string().max(50, "State too long").optional(),
+      postalCode: z.string().max(20, "Postal code too long").optional(),
+      country: z.string().max(50, "Country too long").optional(),
+    }).optional(),
+    
+    // Custom fields
+    customFields: z.array(z.object({
+      label: z.string().max(50, "Custom field label too long"),
+      value: z.string().max(200, "Custom field value too long"),
+      type: z.enum(["text", "email", "phone", "url"]).default("text"),
+    })).max(5, "Too many custom fields").optional(),
   }),
 });
 
 // WiFi validation schema
 const wifiSchema = z.object({
   wifi: z.object({
-    ssid: z.string().min(1, "SSID is required").max(32, "SSID too long"),
-    password: z.string().max(63, "Password too long"),
-    security: z.enum(["WPA", "WPA2", "WEP", "nopass"], {
-      errorMap: () => ({ message: "Invalid security type" }),
+    ssid: z.string()
+      .min(1, "SSID is required")
+      .max(32, "SSID exceeds maximum length (32 characters)")
+      .refine((ssid) => {
+        // Check for valid characters (printable ASCII)
+        const validChars = /^[\x20-\x7E]*$/;
+        return validChars.test(ssid);
+      }, "SSID contains invalid characters"),
+    
+    password: z.string()
+      .max(63, "Password exceeds maximum length (63 characters)")
+      .min(8, "Password must be at least 8 characters long")
+      .optional(),
+    
+    security: z.enum(["WPA", "WPA2", "WPA3", "WEP", "nopass"], {
+      errorMap: () => ({ message: "Invalid security type. Must be WPA, WPA2, WPA3, WEP, or nopass" }),
     }),
-    hidden: z.boolean().optional(),
-  }),
+    
+    hidden: z.boolean().default(false).optional(),
+    
+    // Additional WiFi configuration options
+    eap: z.enum(["NONE", "PEAP", "TLS", "TTLS", "PWD", "SIM", "AKA", "AKA_PRIME"]).optional(),
+    identity: z.string().max(100, "Identity too long").optional(),
+    anonymousIdentity: z.string().max(100, "Anonymous identity too long").optional(),
+    phase2: z.enum(["NONE", "PAP", "MSCHAP", "MSCHAPV2", "GTC"]).optional(),
+  }).refine((data) => {
+    // Validate password requirement based on security type
+    if (data.security !== "nopass" && !data.password) {
+      return false;
+    }
+    return true;
+  }, "Password is required for secured networks"),
 });
 
 // Text validation schema
@@ -100,16 +210,218 @@ const appDownloadSchema = z.object({
   }),
 });
 
-// Multi-URL validation schema
+// Multi-URL validation schema - Enhanced for comprehensive landing pages
 const multiUrlSchema = z.object({
   multiUrl: z.object({
+    // Basic Information
     title: z.string().max(100, "Title too long").optional(),
-    description: z.string().max(200, "Description too long").optional(),
+    description: z.string().max(500, "Description too long").optional(),
+    bio: z.string().max(500, "Bio too long").optional(),
+    
+    // Profile Information
+    profileImage: z.string().url("Invalid profile image URL").optional(),
+    profileName: z.string().max(100, "Profile name too long").optional(),
+    profileTitle: z.string().max(100, "Profile title too long").optional(),
+    
+    // Links with enhanced validation
     links: z.array(z.object({
-      title: z.string().min(1, "Link title is required").max(50, "Link title too long"),
+      id: z.string().min(1, "Link ID is required"),
+      title: z.string().min(1, "Link title is required").max(100, "Link title too long"),
       url: z.string().url("Invalid URL format"),
-      icon: z.string().max(100, "Icon path too long").optional(),
-    })).min(1, "At least one link is required").max(10, "Too many links"),
+      description: z.string().max(200, "Link description too long").optional(),
+      icon: z.string().max(200, "Icon path too long").optional(),
+      iconType: z.enum(["emoji", "image", "platform"]).optional(),
+      platform: z.string().max(50, "Platform name too long").optional(),
+      
+      // Link Styling
+      backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid background color").optional(),
+      textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid text color").optional(),
+      borderColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid border color").optional(),
+      borderRadius: z.number().min(0).max(50, "Border radius too large").optional(),
+      
+      // Link Scheduling
+      isActive: z.boolean().optional(),
+      scheduledStart: z.string().datetime().optional(),
+      scheduledEnd: z.string().datetime().optional(),
+      timezone: z.string().max(50, "Timezone too long").optional(),
+      
+      // Link Analytics
+      clickCount: z.number().min(0).optional(),
+      lastClicked: z.string().datetime().optional(),
+      
+      // Link Type
+      linkType: z.enum(["standard", "social", "email", "phone", "app", "file", "contact"]).optional(),
+      
+      // Additional metadata
+      metadata: z.object({
+        subject: z.string().max(200, "Subject too long").optional(),
+        body: z.string().max(1000, "Body too long").optional(),
+        downloadFilename: z.string().max(100, "Filename too long").optional(),
+        appStoreUrl: z.string().url("Invalid App Store URL").optional(),
+        playStoreUrl: z.string().url("Invalid Play Store URL").optional(),
+      }).optional(),
+    })).min(1, "At least one link is required").max(50, "Too many links"),
+    
+    // Theme and Branding (optional, extensive validation)
+    theme: z.object({
+      templateId: z.string().max(50, "Template ID too long").optional(),
+      themeName: z.enum(["professional", "creative", "minimalist", "dark", "neon", "vintage", "gradient"]).optional(),
+      
+      branding: z.object({
+        logo: z.string().url("Invalid logo URL").optional(),
+        logoPosition: z.enum(["top", "center", "floating"]).optional(),
+        logoSize: z.number().min(16).max(200, "Logo size too large").optional(),
+        primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid primary color").optional(),
+        secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid secondary color").optional(),
+        accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid accent color").optional(),
+        textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid text color").optional(),
+        backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid background color").optional(),
+        
+        backgroundType: z.enum(["solid", "gradient", "image", "video", "animated"]).optional(),
+        backgroundGradient: z.object({
+          type: z.enum(["linear", "radial"]),
+          colors: z.array(z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid gradient color")).min(2).max(5),
+          direction: z.string().max(20, "Direction too long").optional(),
+        }).optional(),
+        backgroundImage: z.string().url("Invalid background image URL").optional(),
+        backgroundVideo: z.string().url("Invalid background video URL").optional(),
+        backgroundOverlay: z.object({
+          color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid overlay color"),
+          opacity: z.number().min(0).max(1, "Opacity must be between 0 and 1"),
+        }).optional(),
+      }).optional(),
+      
+      typography: z.object({
+        fontFamily: z.string().max(100, "Font family too long").optional(),
+        fontSize: z.object({
+          title: z.number().min(12).max(72, "Title font size too large").optional(),
+          description: z.number().min(10).max(32, "Description font size too large").optional(),
+          links: z.number().min(10).max(24, "Link font size too large").optional(),
+        }).optional(),
+        fontWeight: z.object({
+          title: z.number().min(100).max(900, "Invalid title font weight").optional(),
+          description: z.number().min(100).max(900, "Invalid description font weight").optional(),
+          links: z.number().min(100).max(900, "Invalid link font weight").optional(),
+        }).optional(),
+        textAlign: z.enum(["left", "center", "right"]).optional(),
+        lineHeight: z.number().min(1).max(3, "Line height too large").optional(),
+      }).optional(),
+      
+      layout: z.object({
+        containerWidth: z.number().min(280).max(800, "Container width too large").optional(),
+        linkSpacing: z.number().min(4).max(40, "Link spacing too large").optional(),
+        padding: z.number().min(8).max(80, "Padding too large").optional(),
+        borderRadius: z.number().min(0).max(50, "Border radius too large").optional(),
+        
+        linkLayout: z.enum(["list", "grid", "masonry"]).optional(),
+        linkColumns: z.number().min(1).max(4, "Too many columns").optional(),
+        linkButtonStyle: z.enum(["rounded", "square", "pill", "custom"]).optional(),
+        
+        animations: z.object({
+          entrance: z.string().max(50, "Animation name too long").optional(),
+          hover: z.string().max(50, "Animation name too long").optional(),
+          click: z.string().max(50, "Animation name too long").optional(),
+        }).optional(),
+      }).optional(),
+      
+      customCss: z.string().max(10000, "Custom CSS too long").optional(),
+    }).optional(),
+    
+    // SEO and Social Media (optional)
+    seo: z.object({
+      metaTitle: z.string().max(60, "Meta title too long").optional(),
+      metaDescription: z.string().max(160, "Meta description too long").optional(),
+      keywords: z.array(z.string().max(50, "Keyword too long")).max(10, "Too many keywords").optional(),
+      
+      ogTitle: z.string().max(60, "OG title too long").optional(),
+      ogDescription: z.string().max(160, "OG description too long").optional(),
+      ogImage: z.string().url("Invalid OG image URL").optional(),
+      ogType: z.string().max(20, "OG type too long").optional(),
+      
+      twitterCard: z.enum(["summary", "summary_large_image"]).optional(),
+      twitterTitle: z.string().max(60, "Twitter title too long").optional(),
+      twitterDescription: z.string().max(160, "Twitter description too long").optional(),
+      twitterImage: z.string().url("Invalid Twitter image URL").optional(),
+      twitterSite: z.string().max(50, "Twitter site too long").optional(),
+      twitterCreator: z.string().max(50, "Twitter creator too long").optional(),
+    }).optional(),
+    
+    // Social Media Integration (optional)
+    socialMedia: z.object({
+      platforms: z.array(z.object({
+        platform: z.string().max(30, "Platform name too long"),
+        username: z.string().max(50, "Username too long").optional(),
+        url: z.string().url("Invalid social media URL"),
+        displayFollowerCount: z.boolean().optional(),
+        followerCount: z.number().min(0).optional(),
+        isVerified: z.boolean().optional(),
+        autoDetected: z.boolean().optional(),
+      })).max(20, "Too many social media platforms"),
+      
+      showSocialProof: z.boolean().optional(),
+      socialProofText: z.string().max(100, "Social proof text too long").optional(),
+    }).optional(),
+    
+    // Advanced Features (optional)
+    features: z.object({
+      pwaEnabled: z.boolean().optional(),
+      pwaName: z.string().max(30, "PWA name too long").optional(),
+      pwaShortName: z.string().max(12, "PWA short name too long").optional(),
+      pwaDescription: z.string().max(200, "PWA description too long").optional(),
+      pwaIcon: z.string().url("Invalid PWA icon URL").optional(),
+      
+      trackingEnabled: z.boolean().optional(),
+      trackingCode: z.string().max(100, "Tracking code too long").optional(),
+      
+      contactFormEnabled: z.boolean().optional(),
+      contactFormFields: z.array(z.object({
+        name: z.string().max(50, "Field name too long"),
+        type: z.enum(["text", "email", "phone", "textarea", "select"]),
+        label: z.string().max(100, "Field label too long"),
+        required: z.boolean().optional(),
+        options: z.array(z.string().max(50, "Option too long")).optional(),
+      })).max(10, "Too many form fields").optional(),
+      
+      customDomain: z.string().max(100, "Custom domain too long").optional(),
+      
+      passwordProtected: z.boolean().optional(),
+      password: z.string().max(100, "Password too long").optional(),
+      
+      geoRestrictions: z.object({
+        allowedCountries: z.array(z.string().length(2, "Invalid country code")).optional(),
+        blockedCountries: z.array(z.string().length(2, "Invalid country code")).optional(),
+      }).optional(),
+      
+      accessSchedule: z.object({
+        timezone: z.string().max(50, "Timezone too long").optional(),
+        schedule: z.array(z.object({
+          day: z.number().min(0).max(6, "Invalid day"),
+          startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format"),
+          endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format"),
+        })).max(7, "Too many schedule entries").optional(),
+      }).optional(),
+    }).optional(),
+    
+    // Analytics and Tracking (optional, read-only)
+    analytics: z.object({
+      totalViews: z.number().min(0).optional(),
+      uniqueViews: z.number().min(0).optional(),
+      totalClicks: z.number().min(0).optional(),
+      lastViewed: z.string().datetime().optional(),
+      
+      viewsByCountry: z.record(z.number().min(0)).optional(),
+      viewsByDevice: z.record(z.number().min(0)).optional(),
+      viewsByReferrer: z.record(z.number().min(0)).optional(),
+      clicksByLink: z.record(z.number().min(0)).optional(),
+      
+      conversionGoals: z.array(z.object({
+        id: z.string().max(50, "Goal ID too long"),
+        name: z.string().max(100, "Goal name too long"),
+        linkId: z.string().max(50, "Link ID too long").optional(),
+        targetUrl: z.string().url("Invalid target URL").optional(),
+        conversionCount: z.number().min(0).optional(),
+      })).max(10, "Too many conversion goals").optional(),
+    }).optional(),
   }),
 });
 
@@ -203,7 +515,7 @@ export function validateQRCodeData(type: QRCodeType, data: QRCodeData): QRCodeVa
         emailSchema.parse(data);
         break;
       case "phone":
-        phoneSchema.parse({ phone: (data as any).phone });
+        phoneSchema.parse({ phone: (data as { phone?: string }).phone });
         break;
       case "location":
         locationSchema.parse(data);
@@ -212,7 +524,7 @@ export function validateQRCodeData(type: QRCodeType, data: QRCodeData): QRCodeVa
         eventSchema.parse(data);
         break;
       case "app_download":
-        appDownloadSchema.parse({ appDownload: (data as any).appDownload });
+        appDownloadSchema.parse({ appDownload: (data as { appDownload?: unknown }).appDownload });
         break;
       case "multi_url":
         multiUrlSchema.parse(data);
@@ -384,17 +696,18 @@ export function estimateQRCodeVersion(
     H: [7, 14, 24, 34, 44, 58, 64, 84, 98, 119, 137, 155, 177, 194, 220, 250, 280, 310, 338, 382, 403, 439, 461, 511, 535, 593, 625, 658, 698, 742, 790, 842, 898, 958, 983, 1051, 1093, 1139, 1219, 1273]
   };
 
-  const capacities = capacityTable[errorCorrection];
-  
-  if (!capacities) {
-    return 40; // Maximum QR version for unknown error correction
-  }
-  
-  for (let i = 0; i < capacities.length; i++) {
-    if (capacities[i] && dataLength <= capacities[i]) {
-      return i + 1; // QR versions are 1-indexed
+      const capacities = capacityTable[errorCorrection];
+    
+    if (!capacities) {
+      return 40; // Maximum QR version for unknown error correction
     }
-  }
+    
+    for (let i = 0; i < capacities.length; i++) {
+      const capacity = capacities[i];
+      if (capacity && dataLength <= capacity) {
+        return i + 1; // QR versions are 1-indexed
+      }
+    }
   
   return 40; // Maximum QR version
 }

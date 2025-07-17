@@ -272,14 +272,58 @@ export const qrCodes = createTable(
       url?: string;
       // vCard type
       vcard?: {
+        // Required fields
         firstName?: string;
         lastName?: string;
+        
+        // Standard vCard fields
         organization?: string;
         title?: string;
         email?: string;
         phone?: string;
         website?: string;
         address?: string;
+        
+        // Extended fields (vCard Plus)
+        // Social Media
+        linkedin?: string;
+        twitter?: string;
+        instagram?: string;
+        facebook?: string;
+        
+        // Additional Contact Methods
+        whatsapp?: string;
+        skype?: string;
+        telegram?: string;
+        
+        // Professional Info
+        department?: string;
+        assistant?: string;
+        assistantPhone?: string;
+        companyLogo?: string;
+        
+        // Additional fields
+        middleName?: string;
+        nickname?: string;
+        birthday?: string;
+        anniversary?: string;
+        note?: string;
+        
+        // Address components (structured)
+        addressComponents?: {
+          street?: string;
+          city?: string;
+          state?: string;
+          postalCode?: string;
+          country?: string;
+        };
+        
+        // Custom fields
+        customFields?: Array<{
+          label: string;
+          value: string;
+          type: "text" | "email" | "phone" | "url";
+        }>;
       };
       // WiFi type
       wifi?: {
@@ -287,6 +331,11 @@ export const qrCodes = createTable(
         password: string;
         security: string;
         hidden?: boolean;
+        // Enterprise WiFi settings
+        eap?: string;
+        identity?: string;
+        anonymousIdentity?: string;
+        phase2?: string;
       };
       // Text/SMS type
       text?: string;
@@ -315,15 +364,237 @@ export const qrCodes = createTable(
         endDate?: string;
         allDay?: boolean;
       };
-      // Multi-URL type
+      // Multi-URL type - Enhanced Linktree-style landing pages
       multiUrl?: {
+        // Basic Information
         title?: string;
         description?: string;
+        bio?: string;
+        
+        // Profile Information
+        profileImage?: string;
+        profileName?: string;
+        profileTitle?: string;
+        
+        // Links with advanced features
         links: Array<{
+          id: string;
           title: string;
           url: string;
+          description?: string;
           icon?: string;
+          iconType?: "emoji" | "image" | "platform"; // Type of icon
+          platform?: string; // For social media auto-detection
+          
+          // Link Styling
+          backgroundColor?: string;
+          textColor?: string;
+          borderColor?: string;
+          borderRadius?: number;
+          
+          // Link Scheduling
+          isActive?: boolean;
+          scheduledStart?: string; // ISO date string
+          scheduledEnd?: string; // ISO date string
+          timezone?: string;
+          
+          // Link Analytics
+          clickCount?: number;
+          lastClicked?: string;
+          
+          // Link Type
+          linkType?: "standard" | "social" | "email" | "phone" | "app" | "file" | "contact";
+          
+          // Additional metadata
+          metadata?: {
+            subject?: string; // For email links
+            body?: string; // For email/SMS links
+            downloadFilename?: string; // For file links
+            appStoreUrl?: string; // For app links
+            playStoreUrl?: string; // For app links
+          };
         }>;
+        
+        // Theme and Branding
+        theme?: {
+          // Pre-built theme selection
+          templateId?: string;
+          themeName?: "professional" | "creative" | "minimalist" | "dark" | "neon" | "vintage" | "gradient";
+          
+          // Custom Branding
+          branding?: {
+            logo?: string;
+            logoPosition?: "top" | "center" | "floating";
+            logoSize?: number;
+            primaryColor?: string;
+            secondaryColor?: string;
+            accentColor?: string;
+            textColor?: string;
+            backgroundColor?: string;
+            
+            // Background Options
+            backgroundType?: "solid" | "gradient" | "image" | "video" | "animated";
+            backgroundGradient?: {
+              type: "linear" | "radial";
+              colors: string[];
+              direction?: string;
+            };
+            backgroundImage?: string;
+            backgroundVideo?: string;
+            backgroundOverlay?: {
+              color: string;
+              opacity: number;
+            };
+          };
+          
+          // Typography
+          typography?: {
+            fontFamily?: string;
+            fontSize?: {
+              title?: number;
+              description?: number;
+              links?: number;
+            };
+            fontWeight?: {
+              title?: number;
+              description?: number;
+              links?: number;
+            };
+            textAlign?: "left" | "center" | "right";
+            lineHeight?: number;
+          };
+          
+          // Layout
+          layout?: {
+            containerWidth?: number;
+            linkSpacing?: number;
+            padding?: number;
+            borderRadius?: number;
+            
+            // Link Layout
+            linkLayout?: "list" | "grid" | "masonry";
+            linkColumns?: number;
+            linkButtonStyle?: "rounded" | "square" | "pill" | "custom";
+            
+            // Animations
+            animations?: {
+              entrance?: string;
+              hover?: string;
+              click?: string;
+            };
+          };
+          
+          // Custom CSS
+          customCss?: string;
+        };
+        
+        // SEO and Social Media
+        seo?: {
+          metaTitle?: string;
+          metaDescription?: string;
+          keywords?: string[];
+          
+          // Open Graph
+          ogTitle?: string;
+          ogDescription?: string;
+          ogImage?: string;
+          ogType?: string;
+          
+          // Twitter Card
+          twitterCard?: "summary" | "summary_large_image";
+          twitterTitle?: string;
+          twitterDescription?: string;
+          twitterImage?: string;
+          twitterSite?: string;
+          twitterCreator?: string;
+        };
+        
+        // Social Media Integration
+        socialMedia?: {
+          platforms: Array<{
+            platform: string;
+            username?: string;
+            url: string;
+            displayFollowerCount?: boolean;
+            followerCount?: number;
+            isVerified?: boolean;
+            autoDetected?: boolean;
+          }>;
+          
+          // Social proof
+          showSocialProof?: boolean;
+          socialProofText?: string;
+        };
+        
+        // Advanced Features
+        features?: {
+          // PWA Settings
+          pwaEnabled?: boolean;
+          pwaName?: string;
+          pwaShortName?: string;
+          pwaDescription?: string;
+          pwaIcon?: string;
+          
+          // Analytics
+          trackingEnabled?: boolean;
+          trackingCode?: string; // Google Analytics, etc.
+          
+          // Contact Form
+          contactFormEnabled?: boolean;
+          contactFormFields?: Array<{
+            name: string;
+            type: "text" | "email" | "phone" | "textarea" | "select";
+            label: string;
+            required?: boolean;
+            options?: string[]; // For select fields
+          }>;
+          
+          // Custom Domain
+          customDomain?: string;
+          
+          // Password Protection
+          passwordProtected?: boolean;
+          password?: string;
+          
+          // Geographic Restrictions
+          geoRestrictions?: {
+            allowedCountries?: string[];
+            blockedCountries?: string[];
+          };
+          
+          // Time-based Access
+          accessSchedule?: {
+            timezone?: string;
+            schedule?: Array<{
+              day: number; // 0-6 (Sunday-Saturday)
+              startTime: string; // HH:MM
+              endTime: string; // HH:MM
+            }>;
+          };
+        };
+        
+        // Analytics and Tracking
+        analytics?: {
+          totalViews?: number;
+          uniqueViews?: number;
+          totalClicks?: number;
+          lastViewed?: string;
+          
+          // Detailed Analytics
+          viewsByCountry?: Record<string, number>;
+          viewsByDevice?: Record<string, number>;
+          viewsByReferrer?: Record<string, number>;
+          clicksByLink?: Record<string, number>;
+          
+          // Conversion Tracking
+          conversionGoals?: Array<{
+            id: string;
+            name: string;
+            linkId?: string;
+            targetUrl?: string;
+            conversionCount?: number;
+          }>;
+        };
       };
       // Menu type
       menu?: {
@@ -397,6 +668,37 @@ export const qrCodes = createTable(
 );
 
 // ================================
+// REDIRECTS (for dynamic URL tracking)
+// ================================
+
+export const redirects = createTable(
+  "redirect",
+  (d) => ({
+    id: d.varchar({ length: 255 }).notNull().primaryKey().$defaultFn(() => crypto.randomUUID()),
+    originalUrl: d.text().notNull(),
+    shortCode: d.varchar({ length: 255 }).notNull().unique(),
+    clickCount: d.integer().default(0).notNull(),
+    userId: d.varchar({ length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+    qrCodeId: d.varchar({ length: 255 }).notNull().references(() => qrCodes.id, { onDelete: "cascade" }),
+    // Tracking data
+    lastAccessedAt: d.timestamp({ withTimezone: true }),
+    // Metadata
+    isActive: d.boolean().default(true).notNull(),
+    expiresAt: d.timestamp({ withTimezone: true }),
+    createdAt: d.timestamp({ withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
+  }),
+  (t) => [
+    index("redirect_short_code_idx").on(t.shortCode),
+    index("redirect_qr_code_idx").on(t.qrCodeId),
+    index("redirect_user_idx").on(t.userId),
+    index("redirect_active_idx").on(t.isActive),
+    index("redirect_expires_idx").on(t.expiresAt),
+    index("redirect_click_count_idx").on(t.clickCount),
+  ]
+);
+
+// ================================
 // ANALYTICS EVENTS
 // ================================
 
@@ -415,27 +717,42 @@ export const analyticsEvents = createTable(
         os: string;
         browser: string;
         version: string;
+        model?: string;
+        vendor?: string;
       };
-      // Location information
+      // Location information (IP-based geolocation)
       location?: {
         country?: string;
+        countryCode?: string;
         region?: string;
         city?: string;
         latitude?: number;
         longitude?: number;
         timezone?: string;
+        postalCode?: string;
+        isp?: string;
       };
       // Network information
       ip?: string;
+      ipVersion?: string; // IPv4 or IPv6
       isp?: string;
       // Referrer information
       referrer?: string;
+      referrerDomain?: string;
       utm?: {
         source?: string;
         medium?: string;
         campaign?: string;
         term?: string;
         content?: string;
+      };
+      // Tracking specific data
+      clickData?: {
+        timestamp: string;
+        sessionId: string;
+        isUniqueVisitor: boolean;
+        isReturn: boolean;
+        timeOnPage?: number;
       };
       // Custom event data
       customData?: Record<string, any>;
@@ -534,6 +851,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   templates: many(templates),
   organizationMembers: many(organizationMembers),
   analyticsEvents: many(analyticsEvents),
+  redirects: many(redirects),
 }));
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
@@ -601,6 +919,18 @@ export const qrCodesRelations = relations(qrCodes, ({ one, many }) => ({
     references: [templates.id] 
   }),
   analyticsEvents: many(analyticsEvents),
+  redirects: many(redirects),
+}));
+
+export const redirectsRelations = relations(redirects, ({ one }) => ({
+  user: one(users, { 
+    fields: [redirects.userId], 
+    references: [users.id] 
+  }),
+  qrCode: one(qrCodes, { 
+    fields: [redirects.qrCodeId], 
+    references: [qrCodes.id] 
+  }),
 }));
 
 export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => ({

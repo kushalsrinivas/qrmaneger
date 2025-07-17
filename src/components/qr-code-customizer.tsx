@@ -1,26 +1,166 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload } from "lucide-react"
+import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload } from "lucide-react";
 
-export function QRCodeCustomizer() {
-  const [size, setSize] = useState([300])
-  const [errorCorrection, setErrorCorrection] = useState("M")
-  const [foregroundColor, setForegroundColor] = useState("#000000")
-  const [backgroundColor, setBackgroundColor] = useState("#ffffff")
+interface QRCodeCustomizerProps {
+  size?: number;
+  errorCorrection?: "L" | "M" | "Q" | "H";
+  foregroundColor?: string;
+  backgroundColor?: string;
+  cornerStyle?: string;
+  logoUrl?: string;
+  logoSize?: number;
+  onCustomizationChange?: (customization: {
+    size?: number;
+    errorCorrection?: "L" | "M" | "Q" | "H";
+    foregroundColor?: string;
+    backgroundColor?: string;
+    cornerStyle?: string;
+    logoUrl?: string;
+    logoSize?: number;
+  }) => void;
+}
+
+export function QRCodeCustomizer({
+  size = 300,
+  errorCorrection = "M",
+  foregroundColor = "#000000",
+  backgroundColor = "#ffffff",
+  cornerStyle = "square",
+  logoUrl = "",
+  logoSize = 20,
+  onCustomizationChange,
+}: QRCodeCustomizerProps) {
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+
+  const handleSizeChange = (newSize: number[]) => {
+    const sizeValue = newSize[0];
+    onCustomizationChange?.({
+      size: sizeValue,
+      errorCorrection,
+      foregroundColor,
+      backgroundColor,
+      cornerStyle,
+      logoUrl,
+      logoSize,
+    });
+  };
+
+  const handleErrorCorrectionChange = (
+    newErrorCorrection: "L" | "M" | "Q" | "H",
+  ) => {
+    onCustomizationChange?.({
+      size,
+      errorCorrection: newErrorCorrection,
+      foregroundColor,
+      backgroundColor,
+      cornerStyle,
+      logoUrl,
+      logoSize,
+    });
+  };
+
+  const handleForegroundColorChange = (newColor: string) => {
+    onCustomizationChange?.({
+      size,
+      errorCorrection,
+      foregroundColor: newColor,
+      backgroundColor,
+      cornerStyle,
+      logoUrl,
+      logoSize,
+    });
+  };
+
+  const handleBackgroundColorChange = (newColor: string) => {
+    onCustomizationChange?.({
+      size,
+      errorCorrection,
+      foregroundColor,
+      backgroundColor: newColor,
+      cornerStyle,
+      logoUrl,
+      logoSize,
+    });
+  };
+
+  const handleCornerStyleChange = (newCornerStyle: string) => {
+    onCustomizationChange?.({
+      size,
+      errorCorrection,
+      foregroundColor,
+      backgroundColor,
+      cornerStyle: newCornerStyle,
+      logoUrl,
+      logoSize,
+    });
+  };
+
+  const handleLogoSizeChange = (newLogoSize: number[]) => {
+    const logoSizeValue = newLogoSize[0];
+    onCustomizationChange?.({
+      size,
+      errorCorrection,
+      foregroundColor,
+      backgroundColor,
+      cornerStyle,
+      logoUrl,
+      logoSize: logoSizeValue,
+    });
+  };
+
+  const handleLogoUpload = () => {
+    // Create a file input element
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        setLogoFile(file);
+        // Create a URL for the file to use as logoUrl
+        const logoUrl = URL.createObjectURL(file);
+        onCustomizationChange?.({
+          size,
+          errorCorrection,
+          foregroundColor,
+          backgroundColor,
+          cornerStyle,
+          logoUrl,
+          logoSize,
+        });
+      }
+    };
+    input.click();
+  };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Customization</CardTitle>
-        <CardDescription>Customize the appearance of your QR code</CardDescription>
+        <CardDescription>
+          Customize the appearance of your QR code
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="style" className="w-full">
@@ -32,8 +172,15 @@ export function QRCodeCustomizer() {
 
           <TabsContent value="style" className="space-y-4">
             <div className="space-y-2">
-              <Label>Size: {size[0]}px</Label>
-              <Slider value={size} onValueChange={setSize} max={800} min={100} step={50} className="w-full" />
+              <Label>Size: {size}px</Label>
+              <Slider
+                value={[size]}
+                onValueChange={handleSizeChange}
+                max={800}
+                min={100}
+                step={50}
+                className="w-full"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -44,12 +191,16 @@ export function QRCodeCustomizer() {
                     id="fg-color"
                     type="color"
                     value={foregroundColor}
-                    onChange={(e) => setForegroundColor(e.target.value)}
-                    className="w-12 h-10 p-1"
+                    onChange={(e) =>
+                      handleForegroundColorChange(e.target.value)
+                    }
+                    className="h-10 w-12 p-1"
                   />
                   <Input
                     value={foregroundColor}
-                    onChange={(e) => setForegroundColor(e.target.value)}
+                    onChange={(e) =>
+                      handleForegroundColorChange(e.target.value)
+                    }
                     placeholder="#000000"
                   />
                 </div>
@@ -62,12 +213,16 @@ export function QRCodeCustomizer() {
                     id="bg-color"
                     type="color"
                     value={backgroundColor}
-                    onChange={(e) => setBackgroundColor(e.target.value)}
-                    className="w-12 h-10 p-1"
+                    onChange={(e) =>
+                      handleBackgroundColorChange(e.target.value)
+                    }
+                    className="h-10 w-12 p-1"
                   />
                   <Input
                     value={backgroundColor}
-                    onChange={(e) => setBackgroundColor(e.target.value)}
+                    onChange={(e) =>
+                      handleBackgroundColorChange(e.target.value)
+                    }
                     placeholder="#ffffff"
                   />
                 </div>
@@ -76,7 +231,10 @@ export function QRCodeCustomizer() {
 
             <div className="space-y-2">
               <Label>Corner Style</Label>
-              <Select>
+              <Select
+                value={cornerStyle}
+                onValueChange={handleCornerStyleChange}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select corner style" />
                 </SelectTrigger>
@@ -92,23 +250,39 @@ export function QRCodeCustomizer() {
           <TabsContent value="logo" className="space-y-4">
             <div className="space-y-2">
               <Label>Upload Logo</Label>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={handleLogoUpload}
+              >
                 <Upload className="mr-2 h-4 w-4" />
-                Choose Image
+                {logoFile ? logoFile.name : "Choose Image"}
               </Button>
-              <p className="text-xs text-muted-foreground">Recommended: PNG or SVG, max 2MB</p>
+              <p className="text-muted-foreground text-xs">
+                Recommended: PNG or SVG, max 2MB
+              </p>
             </div>
 
             <div className="space-y-2">
               <Label>Logo Size (%)</Label>
-              <Slider defaultValue={[20]} max={40} min={10} step={5} className="w-full" />
+              <Slider
+                value={[logoSize]}
+                onValueChange={handleLogoSizeChange}
+                max={40}
+                min={10}
+                step={5}
+                className="w-full"
+              />
             </div>
           </TabsContent>
 
           <TabsContent value="advanced" className="space-y-4">
             <div className="space-y-2">
               <Label>Error Correction Level</Label>
-              <Select value={errorCorrection} onValueChange={setErrorCorrection}>
+              <Select
+                value={errorCorrection}
+                onValueChange={handleErrorCorrectionChange}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -140,5 +314,5 @@ export function QRCodeCustomizer() {
         </Tabs>
       </CardContent>
     </Card>
-  )
+  );
 }

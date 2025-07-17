@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { shortUrlService } from "@/lib/short-url-service";
 import { convertDataToQRString } from "@/lib/qr-handlers";
+import { rateLimitingService } from "@/lib/rate-limiting";
 import { db } from "@/server/db";
-import { analyticsEvents } from "@/server/db/schema";
+import { analyticsEvents, redirects } from "@/server/db/schema";
 import { nanoid } from "nanoid";
+import { eq, sql } from "drizzle-orm";
 
 /**
- * Handles QR code redirect requests
+ * Handles QR code redirect requests with comprehensive tracking
  * GET /q/[shortCode]
  */
 export async function GET(
@@ -16,6 +18,25 @@ export async function GET(
   const { shortCode } = params;
   
   try {
+    // Extract client information
+    const userAgent = request.headers.get("user-agent") || "";
+    const referer = request.headers.get("referer") || "";
+    const ipAddress = getClientIP(request);
+    
+    // Rate limiting check
+    const rateLimitResult = await rateLimitingService.checkRedirectLimit(shortCode, ipAddress);
+    if (rateLimitResult.limited) {
+      return new NextResponse("Rate limit exceeded", { 
+        status: 429,
+        headers: {
+          "Retry-After": Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
+          "X-RateLimit-Limit": "1000",
+          "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
+          "X-RateLimit-Reset": rateLimitResult.resetTime.toString(),
+        },
+      });
+    }
+    
     // Resolve the short code
     const result = await shortUrlService.resolveShortCode(shortCode);
     
@@ -31,18 +52,19 @@ export async function GET(
       return new NextResponse("QR code is inactive", { status: 403 });
     }
     
-    // Extract analytics data from request
-    const userAgent = request.headers.get("user-agent") || "";
-    const referer = request.headers.get("referer") || "";
-    const ipAddress = getClientIP(request);
-    
     // Parse device information
     const deviceInfo = parseUserAgent(userAgent);
     
-    // Get location information (simplified - in production, use a GeoIP service)
+    // Get location information (IP-based geolocation)
     const locationInfo = await getLocationFromIP(ipAddress);
     
-    // Record analytics event
+    // Generate session ID for tracking
+    const sessionId = generateSessionId(ipAddress, userAgent);
+    
+    // Check if this is a unique visitor
+    const isUniqueVisitor = await checkUniqueVisitor(result.qrCode.id, sessionId);
+    
+    // Record comprehensive analytics event
     await recordAnalyticsEvent({
       qrCodeId: result.qrCode.id,
       eventType: "scan",
@@ -51,13 +73,287 @@ export async function GET(
       ipAddress,
       deviceInfo,
       locationInfo,
+      sessionId,
+      isUniqueVisitor,
     });
     
-    // Increment scan count
+    // Update redirect record with tracking data
+    await updateRedirectTracking(shortCode, {
+      lastAccessedAt: new Date(),
+      clickCount: sql`${redirects.clickCount} + 1`,
+    });
+    
+    // Increment scan count on QR code
     await shortUrlService.incrementScanCount(result.qrCode.id);
     
     // Handle different QR code types
-    const redirectUrl = await getRedirectUrl(result.qrCode.type, result.originalData);
+    if (result.qrCode.type === "multi_url") {
+      // For multi-URL QR codes, redirect to the landing page
+      const landingPageUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/l/${shortCode}`;
+      return NextResponse.redirect(landingPageUrl, { status: 302 });
+    } else {
+      // For other QR code types, use the existing redirect logic
+      const redirectUrl = await getRedirectUrl(result.qrCode.type, result.originalData);
+      return NextResponse.redirect(redirectUrl, { status: 302 });
+    }
+    
+  } catch (error) {
+    console.error("Redirect error:", error);
+    return new NextResponse("Internal server error", { status: 500 });
+  }
+}
+
+// ================================
+// UTILITY FUNCTIONS
+// ================================
+
+/**
+ * Extract client IP address from request
+ */
+function getClientIP(request: NextRequest): string {
+  // Check various headers for the real IP
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const realIP = request.headers.get("x-real-ip");
+  const cfConnectingIP = request.headers.get("cf-connecting-ip");
+  
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0].trim();
+  }
+  
+  if (realIP) {
+    return realIP;
+  }
+  
+  if (cfConnectingIP) {
+    return cfConnectingIP;
+  }
+  
+  // Fallback to request IP
+  return request.ip || "127.0.0.1";
+}
+
+/**
+ * Parse user agent string to extract device information
+ */
+function parseUserAgent(userAgent: string): {
+  type: "mobile" | "tablet" | "desktop";
+  os: string;
+  browser: string;
+  version: string;
+  model?: string;
+  vendor?: string;
+} {
+  const ua = userAgent.toLowerCase();
+  
+  // Determine device type
+  let type: "mobile" | "tablet" | "desktop" = "desktop";
+  if (ua.includes("mobile")) {
+    type = "mobile";
+  } else if (ua.includes("tablet") || ua.includes("ipad")) {
+    type = "tablet";
+  }
+  
+  // Determine OS
+  let os = "Unknown";
+  if (ua.includes("windows")) {
+    os = "Windows";
+  } else if (ua.includes("mac")) {
+    os = "macOS";
+  } else if (ua.includes("linux")) {
+    os = "Linux";
+  } else if (ua.includes("android")) {
+    os = "Android";
+  } else if (ua.includes("ios") || ua.includes("iphone") || ua.includes("ipad")) {
+    os = "iOS";
+  }
+  
+  // Determine browser
+  let browser = "Unknown";
+  let version = "Unknown";
+  
+  if (ua.includes("chrome")) {
+    browser = "Chrome";
+    const match = ua.match(/chrome\/([0-9.]+)/);
+    version = match ? match[1] : "Unknown";
+  } else if (ua.includes("firefox")) {
+    browser = "Firefox";
+    const match = ua.match(/firefox\/([0-9.]+)/);
+    version = match ? match[1] : "Unknown";
+  } else if (ua.includes("safari")) {
+    browser = "Safari";
+    const match = ua.match(/version\/([0-9.]+)/);
+    version = match ? match[1] : "Unknown";
+  } else if (ua.includes("edge")) {
+    browser = "Edge";
+    const match = ua.match(/edge\/([0-9.]+)/);
+    version = match ? match[1] : "Unknown";
+  }
+  
+  return { type, os, browser, version };
+}
+
+/**
+ * Get location information from IP address
+ * In production, use a real GeoIP service like MaxMind, IPinfo, or similar
+ */
+async function getLocationFromIP(ipAddress: string): Promise<{
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  postalCode?: string;
+  isp?: string;
+}> {
+  try {
+    // For development, return mock data
+    if (ipAddress === "127.0.0.1" || ipAddress.startsWith("192.168.")) {
+      return {
+        country: "United States",
+        countryCode: "US",
+        region: "California",
+        city: "San Francisco",
+        latitude: 37.7749,
+        longitude: -122.4194,
+        timezone: "America/Los_Angeles",
+        postalCode: "94102",
+        isp: "Local Network",
+      };
+    }
+    
+    // In production, use a real GeoIP service
+    // Example with ipinfo.io (requires API key):
+    // const response = await fetch(`https://ipinfo.io/${ipAddress}?token=${process.env.IPINFO_TOKEN}`);
+    // const data = await response.json();
+    // return {
+    //   country: data.country,
+    //   region: data.region,
+    //   city: data.city,
+    //   latitude: data.loc ? parseFloat(data.loc.split(',')[0]) : undefined,
+    //   longitude: data.loc ? parseFloat(data.loc.split(',')[1]) : undefined,
+    //   timezone: data.timezone,
+    //   postalCode: data.postal,
+    //   isp: data.org,
+    // };
+    
+    return {};
+  } catch (error) {
+    console.error("Failed to get location from IP:", error);
+    return {};
+  }
+}
+
+/**
+ * Generate session ID for tracking
+ */
+function generateSessionId(ipAddress: string, userAgent: string): string {
+  const crypto = require("crypto");
+  const data = `${ipAddress}-${userAgent}-${Date.now()}`;
+  return crypto.createHash("sha256").update(data).digest("hex").substring(0, 32);
+}
+
+/**
+ * Check if this is a unique visitor
+ */
+async function checkUniqueVisitor(qrCodeId: string, sessionId: string): Promise<boolean> {
+  try {
+    const existingEvent = await db.query.analyticsEvents.findFirst({
+      where: (events, { eq, and }) => and(
+        eq(events.qrCodeId, qrCodeId),
+        eq(events.sessionId, sessionId)
+      ),
+    });
+    
+    return !existingEvent;
+  } catch (error) {
+    console.error("Error checking unique visitor:", error);
+    return false;
+  }
+}
+
+/**
+ * Record analytics event with comprehensive tracking
+ */
+async function recordAnalyticsEvent({
+  qrCodeId,
+  eventType,
+  userAgent,
+  referer,
+  ipAddress,
+  deviceInfo,
+  locationInfo,
+  sessionId,
+  isUniqueVisitor,
+}: {
+  qrCodeId: string;
+  eventType: "scan" | "view" | "click" | "download" | "share" | "error";
+  userAgent: string;
+  referer: string;
+  ipAddress: string;
+  deviceInfo: any;
+  locationInfo: any;
+  sessionId: string;
+  isUniqueVisitor: boolean;
+}): Promise<void> {
+  try {
+    await db.insert(analyticsEvents).values({
+      qrCodeId,
+      eventType,
+      sessionId,
+      data: {
+        userAgent,
+        device: deviceInfo,
+        location: locationInfo,
+        ip: ipAddress,
+        referrer: referer,
+        referrerDomain: referer ? new URL(referer).hostname : undefined,
+        clickData: {
+          timestamp: new Date().toISOString(),
+          sessionId,
+          isUniqueVisitor,
+          isReturn: !isUniqueVisitor,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Failed to record analytics event:", error);
+  }
+}
+
+/**
+ * Update redirect tracking data
+ */
+async function updateRedirectTracking(shortCode: string, updates: any): Promise<void> {
+  try {
+    await db
+      .update(redirects)
+      .set(updates)
+      .where(eq(redirects.shortCode, shortCode));
+  } catch (error) {
+    console.error("Failed to update redirect tracking:", error);
+  }
+}
+
+/**
+ * Get redirect URL based on QR code type
+ */
+async function getRedirectUrl(qrType: string, originalData: any): Promise<string> {
+  switch (qrType) {
+    case "url":
+      return originalData.url || "https://example.com";
+    case "vcard":
+      // For vCard, we might redirect to a contact page or return the vCard data
+      return `data:text/vcard;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;
+    case "wifi":
+      // For WiFi, we might redirect to a page with connection instructions
+      return `data:text/plain;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;
+    default:
+      // For other types, convert to appropriate format
+      return `data:text/plain;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;
+  }
+}
     
     if (redirectUrl) {
       // Redirect to the target URL

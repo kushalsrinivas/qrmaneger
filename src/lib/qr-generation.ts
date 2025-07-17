@@ -123,6 +123,20 @@ export class QRCodeGenerationService {
       return Buffer.from(svg, 'utf8');
     }
     
+    // Check if we need advanced customization (logo, corner styles, etc.)
+    const needsAdvancedCustomization = options.customization && (
+      options.customization.logoUrl ||
+      options.customization.cornerStyle ||
+      options.customization.patternStyle
+    );
+    
+    if (needsAdvancedCustomization) {
+      // Use the customization service for advanced features
+      const customizationService = new QRCodeCustomizationService();
+      return await customizationService.applyCustomization(content, options, options.customization!);
+    }
+    
+    // Basic QR generation with color customization only
     const qrOptions: QRCode.QRCodeToBufferOptions = {
       type: "png",
       width: options.size,
@@ -267,7 +281,7 @@ export class QRCodeGenerationService {
     const contentLength = content.length;
     
     // QR code capacity table (approximate values for alphanumeric mode)
-    const capacityTable = {
+    const capacityTable: Record<ErrorCorrectionLevel, number[]> = {
       L: [25, 47, 77, 114, 154, 195, 224, 279, 335, 395, 468, 535, 619, 667, 758, 854, 938, 1046, 1153, 1249, 1352, 1460, 1588, 1704, 1853, 1990, 2132, 2223, 2369, 2520, 2677, 2840, 3009, 3183, 3351, 3537, 3729, 3927, 4087, 4296],
       M: [20, 38, 61, 90, 122, 154, 178, 221, 262, 311, 366, 419, 483, 528, 589, 647, 721, 795, 861, 932, 1006, 1094, 1174, 1276, 1370, 1468, 1531, 1631, 1735, 1843, 1955, 2071, 2191, 2306, 2434, 2566, 2702, 2812, 2956, 3094],
       Q: [16, 29, 47, 67, 87, 108, 125, 157, 189, 221, 259, 296, 352, 376, 426, 470, 531, 574, 644, 702, 742, 823, 890, 963, 1041, 1094, 1172, 1263, 1322, 1429, 1499, 1618, 1700, 1787, 1867, 1966, 2071, 2181, 2298, 2420],
@@ -275,6 +289,10 @@ export class QRCodeGenerationService {
     };
     
     const capacities = capacityTable[errorCorrection];
+    
+    if (!capacities) {
+      return 40; // Maximum QR version for unknown error correction
+    }
     
     for (let i = 0; i < capacities.length; i++) {
       if (contentLength <= capacities[i]) {
@@ -353,10 +371,10 @@ export class BatchQRCodeService {
               setTimeout(() => reject(new Error("Generation timeout")), timeout)
             )
           ]);
-          return { success: true, result, request };
+          return { success: true as const, result, request };
         } catch (error) {
           return { 
-            success: false, 
+            success: false as const, 
             error: error instanceof Error ? error.message : "Unknown error",
             request 
           };
@@ -399,8 +417,8 @@ export class QRCodeCustomizationService {
       width: baseOptions.size,
       margin: 2,
       color: {
-        dark: customization.foregroundColor || "#000000",
-        light: customization.backgroundColor || "#ffffff",
+        dark: customization.foregroundColor ?? "#000000",
+        light: customization.backgroundColor ?? "#ffffff",
       },
       errorCorrectionLevel: baseOptions.errorCorrection,
     };
@@ -420,13 +438,110 @@ export class QRCodeCustomizationService {
   }
   
   /**
-   * Embeds logo into QR code
+   * Embeds logo into QR code with proper error correction
    */
   private async embedLogo(qrBuffer: Buffer, customization: QRCodeStyle): Promise<Buffer> {
-    // This would be implemented with image processing library like Sharp
-    // For now, return the original buffer
-    console.log("Logo embedding not yet implemented");
-    return qrBuffer;
+    try {
+      // Import Sharp dynamically to avoid build issues if not installed
+      const sharp = await import("sharp");
+      
+      if (!customization.logoUrl) {
+        return qrBuffer;
+      }
+      
+      // Load the QR code image
+      const qrImage = sharp.default(qrBuffer);
+      const qrMetadata = await qrImage.metadata();
+      
+      if (!qrMetadata.width || !qrMetadata.height) {
+        throw new Error("Invalid QR code dimensions");
+      }
+      
+      // Calculate logo size (should not exceed 20% of QR code area for good readability)
+      const maxLogoSize = Math.min(qrMetadata.width, qrMetadata.height) * 0.2;
+      const logoSize = customization.logoSize ?? maxLogoSize;
+      
+      // Fetch and process the logo
+      const logoResponse = await fetch(customization.logoUrl);
+      if (!logoResponse.ok) {
+        throw new Error("Failed to fetch logo");
+      }
+      
+      const logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+      
+      // Process the logo
+      const processedLogo = await sharp.default(logoBuffer)
+        .resize(Math.round(logoSize), Math.round(logoSize), {
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .png() // Convert to PNG for consistent transparency support
+        .toBuffer();
+      
+      // Calculate position (center by default)
+      const logoPosition = customization.logoPosition ?? "center";
+      let left: number;
+      let top: number;
+      
+      switch (logoPosition) {
+        case "top-left":
+          left = Math.round(qrMetadata.width * 0.1);
+          top = Math.round(qrMetadata.height * 0.1);
+          break;
+        case "top-right":
+          left = Math.round(qrMetadata.width * 0.9 - logoSize);
+          top = Math.round(qrMetadata.height * 0.1);
+          break;
+        case "bottom-left":
+          left = Math.round(qrMetadata.width * 0.1);
+          top = Math.round(qrMetadata.height * 0.9 - logoSize);
+          break;
+        case "bottom-right":
+          left = Math.round(qrMetadata.width * 0.9 - logoSize);
+          top = Math.round(qrMetadata.height * 0.9 - logoSize);
+          break;
+        case "center":
+        default:
+          left = Math.round((qrMetadata.width - logoSize) / 2);
+          top = Math.round((qrMetadata.height - logoSize) / 2);
+          break;
+      }
+      
+      // Create a white background circle for the logo to improve readability
+      const backgroundCircle = Buffer.from(
+        `<svg width="${Math.round(logoSize * 1.2)}" height="${Math.round(logoSize * 1.2)}">
+          <circle cx="${Math.round(logoSize * 0.6)}" cy="${Math.round(logoSize * 0.6)}" r="${Math.round(logoSize * 0.6)}" fill="white" stroke="none"/>
+        </svg>`
+      );
+      
+      const circleBuffer = await sharp.default(backgroundCircle)
+        .png()
+        .toBuffer();
+      
+      // Composite the logo onto the QR code
+      const result = await qrImage
+        .composite([
+          {
+            input: circleBuffer,
+            left: Math.round(left - logoSize * 0.1),
+            top: Math.round(top - logoSize * 0.1),
+          },
+          {
+            input: processedLogo,
+            left,
+            top,
+          },
+        ])
+        .png()
+        .toBuffer();
+      
+      return result;
+      
+    } catch (error) {
+      console.error("Logo embedding failed:", error);
+      // Return original buffer if logo embedding fails
+      return qrBuffer;
+    }
   }
 }
 

@@ -8,6 +8,13 @@
       "when": 1752392304631,
       "tag": "0000_fuzzy_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1752775313813,
+      "tag": "0001_loose_switch",
+      "breakpoints": true
     }
   ]
 }

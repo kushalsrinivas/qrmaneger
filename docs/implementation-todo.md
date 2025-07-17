@@ -8,39 +8,7 @@ Full-featured QR code generator, management platform, and analytics dashboard su
 
 ### 🔥 Phase 1: Foundation (Critical)
 
-#### Authentication & User Management
 
-- [ ] **AUTH-001**: Complete NextAuth.js setup with multiple providers
-  - [ ] Google OAuth integration
-  - [ ] GitHub OAuth integration
-  - [ ] Email/password authentication
-  - [ ] User profile management
-  - **Priority**: High | **Effort**: 2-3 days
-
-- [ ] **AUTH-002**: Implement role-based access control (RBAC)
-  - [ ] User roles: Admin, Team Lead, Member, Viewer
-  - [ ] Permission system for QR code management
-  - [ ] Organization/team management
-  - **Priority**: High | **Effort**: 3-4 days
-
-
-
-
-#### QR Code Generation Engine
-
-- [ ] **QR-001**: Core QR code generation service
-  - [ ] Static QR code generation (embed data directly)
-  - [ ] Dynamic QR code generation (short URL redirect)
-  - [ ] Support for all QR code types
-  - [ ] Error correction level options
-  - **Priority**: High | **Effort**: 4-5 days
-
-- [ ] **QR-002**: QR Code customization engine
-  - [ ] Color customization (foreground/background)
-  - [ ] Logo embedding with positioning
-  - [ ] Shape customization (corner styles, patterns)
-  - [ ] Size and format options (PNG, JPEG, SVG, PDF)
-  - **Priority**: High | **Effort**: 3-4 days
 
 ### 🚀 Phase 2: QR Code Types (Core Functionality)
 

@@ -30,32 +30,49 @@ export default function GeneratePage() {
   const [qrData, setQrData] = useState("");
   const [shouldGenerate, setShouldGenerate] = useState(false);
 
+  // Customization state
+  const [customization, setCustomization] = useState({
+    size: 512,
+    errorCorrection: "M" as "L" | "M" | "Q" | "H",
+    foregroundColor: "#000000",
+    backgroundColor: "#ffffff",
+    cornerStyle: "square",
+    logoUrl: "",
+    logoSize: 20,
+  });
+
   const handleGenerateClick = () => {
     if (qrData.trim()) {
       setShouldGenerate(true);
     }
   };
 
+  const handleCustomizationChange = (
+    newCustomization: Partial<typeof customization>,
+  ) => {
+    setCustomization((prev) => ({ ...prev, ...newCustomization }));
+    // Re-generate QR code with new customization if data exists
+    if (qrData.trim()) {
+      setShouldGenerate(true);
+    }
+  };
+
   return (
-    <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">
-            Generate QR Code
-          </h2>
-          <p className="text-muted-foreground">
-            Create and customize your QR codes with advanced options
-          </p>
-        </div>
+    <div className="container mx-auto p-6">
+      <div className="mb-8">
+        <h1 className="mb-2 text-3xl font-bold">Generate QR Code</h1>
+        <p className="text-muted-foreground">
+          Create and customize QR codes for various purposes
+        </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>QR Code Configuration</CardTitle>
               <CardDescription>
-                Choose the type and content for your QR code
+                Select the type and enter the data for your QR code
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -186,15 +203,37 @@ export default function GeneratePage() {
             </CardContent>
           </Card>
 
-          <QRCodeCustomizer />
+          <QRCodeCustomizer
+            size={customization.size}
+            errorCorrection={customization.errorCorrection}
+            foregroundColor={customization.foregroundColor}
+            backgroundColor={customization.backgroundColor}
+            cornerStyle={customization.cornerStyle}
+            logoUrl={customization.logoUrl}
+            logoSize={customization.logoSize}
+            onCustomizationChange={handleCustomizationChange}
+          />
         </div>
 
         <div className="space-y-6">
           <QRCodeGenerator
             data={qrData}
             type={qrType}
+            mode={isDynamic ? "dynamic" : "static"}
             shouldGenerate={shouldGenerate}
             onGenerationComplete={() => setShouldGenerate(false)}
+            options={{
+              errorCorrection: customization.errorCorrection,
+              size: customization.size,
+              format: "png",
+              customization: {
+                foregroundColor: customization.foregroundColor,
+                backgroundColor: customization.backgroundColor,
+                cornerStyle: customization.cornerStyle,
+                logoUrl: customization.logoUrl,
+                logoSize: customization.logoSize,
+              },
+            }}
           />
         </div>
       </div>
