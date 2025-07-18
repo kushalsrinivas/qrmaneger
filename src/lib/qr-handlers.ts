@@ -1,4 +1,7 @@
-import { QRCodeData, QRCodeType } from "@/server/db/types";
+import { db } from "@/server/db";
+import { qrCodes, analyticsEvents, folders } from "@/server/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
+import type { QRCodeData, QRCodeType } from "@/server/db/types";
 
 // ================================
 // QR CODE DATA HANDLERS
@@ -737,4 +740,134 @@ export function validateEmail(email: string): string {
   }
   
   return email.toLowerCase();
+} 
+
+/**
+ * Syncs analytics and folder data when a QR code is updated
+ */
+export async function syncQRCodeUpdateAnalytics(
+  qrCodeId: string,
+  userId: string,
+  updateData: {
+    folderId?: string | null;
+    name?: string;
+    type?: QRCodeType;
+    data?: QRCodeData;
+    previousFolderId?: string | null;
+  }
+): Promise<void> {
+  try {
+    // Record update event in analytics
+    await db.insert(analyticsEvents).values({
+      qrCodeId,
+      eventType: "view", // Using 'view' as the closest available event type
+      data: {
+        updateFields: Object.keys(updateData).filter(key => 
+          updateData[key as keyof typeof updateData] !== undefined
+        ),
+        timestamp: new Date().toISOString(),
+        userId,
+        customData: {
+          previousFolderId: updateData.previousFolderId,
+          newFolderId: updateData.folderId,
+          nameChanged: updateData.name !== undefined,
+          dataChanged: updateData.data !== undefined,
+        }
+      },
+      sessionId: `update-${qrCodeId}-${Date.now()}`,
+      userId,
+      timestamp: new Date(),
+      datePartition: new Date().toISOString().split('T')[0]
+    });
+
+    // Update folder timestamps if folder changed
+    if (updateData.folderId !== updateData.previousFolderId) {
+      // Update previous folder timestamp
+      if (updateData.previousFolderId) {
+        await db.update(folders)
+          .set({ updatedAt: new Date() })
+          .where(eq(folders.id, updateData.previousFolderId));
+      }
+
+      // Update new folder timestamp
+      if (updateData.folderId) {
+        await db.update(folders)
+          .set({ updatedAt: new Date() })
+          .where(eq(folders.id, updateData.folderId));
+      }
+    }
+
+    // Update QR code last_updated timestamp for analytics
+    await db.update(qrCodes)
+      .set({ 
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(qrCodes.id, qrCodeId),
+        eq(qrCodes.userId, userId)
+      ));
+
+  } catch (error) {
+    console.error("Failed to sync QR code update analytics:", error);
+    // Don't throw error to prevent update operation from failing
+  }
+}
+
+/**
+ * Validates folder ownership and existence
+ */
+export async function validateFolderAccess(
+  folderId: string | null,
+  userId: string
+): Promise<{ isValid: boolean; folder?: any }> {
+  if (!folderId) {
+    return { isValid: true }; // null folder is valid (root level)
+  }
+
+  try {
+    const folder = await db.query.folders.findFirst({
+      where: and(
+        eq(folders.id, folderId),
+        eq(folders.userId, userId)
+      )
+    });
+
+    return {
+      isValid: !!folder,
+      folder
+    };
+  } catch (error) {
+    console.error("Failed to validate folder access:", error);
+    return { isValid: false };
+  }
+}
+
+/**
+ * Records QR code access event for analytics
+ */
+export async function recordQRCodeAccess(
+  qrCodeId: string,
+  eventType: "view" | "scan" | "update" | "delete",
+  metadata?: Record<string, any>
+): Promise<void> {
+  try {
+    await db.insert(analyticsEvents).values({
+      qrCodeId,
+      eventType,
+      data: {
+        timestamp: new Date().toISOString(),
+        metadata: metadata || {},
+        customData: {
+          source: "qr_management",
+          action: eventType
+        }
+      },
+      sessionId: `${eventType}-${qrCodeId}-${Date.now()}`,
+      timestamp: new Date(),
+      datePartition: new Date().toISOString().split('T')[0]
+    });
+  } catch (error) {
+    console.error("Failed to record QR code access:", error);
+    // Don't throw error to prevent main operation from failing
+  }
 } 

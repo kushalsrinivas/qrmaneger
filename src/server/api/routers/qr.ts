@@ -16,6 +16,7 @@ import {
 import { qrCodeService, batchQRService } from "@/lib/qr-generation";
 import { shortUrlService } from "@/lib/short-url-service";
 import { validateQRCodeData } from "@/lib/qr-validation";
+import { syncQRCodeUpdateAnalytics, validateFolderAccess } from "@/lib/qr-handlers";
 import { eq, and, desc, gte, count, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
@@ -65,6 +66,31 @@ const batchGenerationSchema = z.object({
 const updateDynamicQRSchema = z.object({
   qrCodeId: z.string(),
   data: z.any(),
+});
+
+// New comprehensive QR code update schema
+const updateQRCodeSchema = z.object({
+  id: z.string().min(1, "QR code ID is required"),
+  name: z.string().min(1, "Name is required").max(255, "Name too long").optional(),
+  description: z.string().max(1000, "Description too long").optional(),
+  data: z.any().optional(), // Will be validated by service layer based on QR type
+  style: z.object({
+    foregroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid foreground color").optional(),
+    backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid background color").optional(),
+    cornerStyle: z.enum(["square", "rounded", "circle"]).optional(),
+    patternStyle: z.enum(["square", "rounded", "circle"]).optional(),
+    logoUrl: z.string().url("Invalid logo URL").optional(),
+    logoSize: z.number().min(5).max(50, "Logo size must be between 5% and 50%").optional(),
+    logoPosition: z.enum(["center", "top", "bottom"]).optional(),
+  }).optional(),
+  size: z.number().min(64).max(2048).optional(),
+  format: z.enum(["png", "svg", "jpeg", "pdf"]).optional(),
+  errorCorrection: z.enum(["L", "M", "Q", "H"]).optional(),
+  folderId: z.string().nullable().optional(),
+  templateId: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  expiresAt: z.date().nullable().optional(),
 });
 
 const qrCodeAnalyticsSchema = z.object({
@@ -240,6 +266,192 @@ export const qrRouter = createTRPCRouter({
         
       } catch (error) {
         console.error("Dynamic QR code update failed:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error instanceof Error ? error.message : "Update failed",
+        });
+      }
+    }),
+
+  /**
+   * Update a comprehensive QR code
+   */
+  update: protectedProcedure
+    .input(updateQRCodeSchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      
+      try {
+        // Verify ownership and get current QR code
+        const qrCode = await ctx.db.query.qrCodes.findFirst({
+          where: and(
+            eq(qrCodes.id, input.id),
+            eq(qrCodes.userId, userId)
+          ),
+          with: {
+            folder: true,
+            template: true,
+          },
+        });
+        
+        if (!qrCode) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "QR code not found or access denied",
+          });
+        }
+        
+        // Validate the new data if provided
+        if (input.data !== undefined) {
+          const validation = validateQRCodeData(qrCode.type, input.data);
+          if (!validation.isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Data validation failed: ${validation.errors.join(", ")}`,
+            });
+          }
+        }
+        
+        // Validate required fields for name
+        if (input.name !== undefined && input.name.trim().length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "QR code name cannot be empty",
+          });
+        }
+        
+        // Validate folder access if folder is being changed
+        if (input.folderId !== undefined) {
+          const folderValidation = await validateFolderAccess(input.folderId, userId);
+          if (!folderValidation.isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid folder or access denied",
+            });
+          }
+        }
+        
+        // Determine if QR code image needs regeneration
+        const needsRegeneration = 
+          input.data !== undefined ||
+          input.style !== undefined ||
+          input.size !== undefined ||
+          input.format !== undefined ||
+          input.errorCorrection !== undefined;
+        
+        // Prepare update fields
+        const updateFields: any = {};
+        if (input.name !== undefined) updateFields.name = input.name;
+        if (input.description !== undefined) updateFields.description = input.description;
+        if (input.data !== undefined) updateFields.data = input.data;
+        if (input.style !== undefined) updateFields.style = input.style;
+        if (input.size !== undefined) updateFields.size = input.size;
+        if (input.format !== undefined) updateFields.format = input.format;
+        if (input.errorCorrection !== undefined) updateFields.errorCorrection = input.errorCorrection;
+        if (input.folderId !== undefined) updateFields.folderId = input.folderId;
+        if (input.templateId !== undefined) updateFields.templateId = input.templateId;
+        if (input.tags !== undefined) updateFields.tags = input.tags;
+        if (input.status !== undefined) updateFields.status = input.status;
+        if (input.expiresAt !== undefined) updateFields.expiresAt = input.expiresAt;
+        
+        // Add updatedAt field
+        updateFields.updatedAt = new Date();
+        
+        // Regenerate QR code image if needed
+        if (needsRegeneration) {
+          try {
+            // Create updated QR code data for regeneration
+            const updatedQRData = {
+              ...qrCode,
+              ...updateFields,
+              data: input.data !== undefined ? input.data : qrCode.data,
+              style: input.style !== undefined ? input.style : qrCode.style,
+              size: input.size !== undefined ? input.size : qrCode.size,
+              format: input.format !== undefined ? input.format : qrCode.format,
+              errorCorrection: input.errorCorrection !== undefined ? input.errorCorrection : qrCode.errorCorrection,
+            };
+            
+            // Generate new QR code image
+            const buffer = await qrCodeService.generateQRCodeBuffer(updatedQRData);
+            const imageUrl = await qrCodeService.storeQRCodeImage(buffer, qrCode.id, updatedQRData.format);
+            
+            // Update image URL and size
+            updateFields.imageUrl = imageUrl;
+            updateFields.imageSize = buffer.length;
+            
+            // For dynamic QR codes, update the destination if data changed
+            if (qrCode.isDynamic && input.data !== undefined) {
+              await shortUrlService.updateDynamicQRCode(qrCode.id, input.data, userId);
+            }
+            
+          } catch (regenerationError) {
+            console.error("QR code regeneration failed:", regenerationError);
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to regenerate QR code image",
+            });
+          }
+        }
+
+        // Perform update
+        const updatedQrCode = await ctx.db.update(qrCodes)
+          .set(updateFields)
+          .where(and(
+            eq(qrCodes.id, input.id),
+            eq(qrCodes.userId, userId)
+          ))
+          .returning();
+        
+        if (updatedQrCode.length === 0) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update QR code",
+          });
+        }
+        
+        // Sync analytics and folder data (non-blocking)
+        try {
+          await syncQRCodeUpdateAnalytics(input.id, userId, {
+            folderId: input.folderId,
+            name: input.name,
+            type: qrCode.type,
+            data: input.data,
+            previousFolderId: qrCode.folderId,
+          });
+        } catch (analyticsError) {
+          // Log the error but don't fail the update operation
+          console.error("Analytics sync failed:", analyticsError);
+        }
+        
+        // Get the updated QR code with relations for return
+        const finalQrCode = await ctx.db.query.qrCodes.findFirst({
+          where: eq(qrCodes.id, input.id),
+          with: {
+            folder: true,
+            template: true,
+            analyticsEvents: {
+              orderBy: [desc(analyticsEvents.timestamp)],
+              limit: 5,
+            },
+          },
+        });
+        
+        if (!finalQrCode) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to retrieve updated QR code",
+          });
+        }
+        
+        return { 
+          success: true, 
+          qrCode: finalQrCode,
+          regenerated: needsRegeneration,
+          message: needsRegeneration ? "QR code updated and regenerated successfully" : "QR code updated successfully"
+        };
+        
+      } catch (error) {
+        console.error("QR code update failed:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: error instanceof Error ? error.message : "Update failed",

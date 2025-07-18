@@ -23,9 +23,11 @@ import { nanoid } from "nanoid";
  */
 export class QRCodeGenerationService {
   private static instance: QRCodeGenerationService;
-  private qrCodeCache: Map<string, Buffer> = new Map();
+  private qrCodeCache = new Map<string, Buffer>();
   
-  private constructor() {}
+  private constructor() {
+    // Private constructor for singleton pattern
+  }
   
   public static getInstance(): QRCodeGenerationService {
     if (!QRCodeGenerationService.instance) {
@@ -125,8 +127,8 @@ export class QRCodeGenerationService {
     
     // Check if we need advanced customization (logo, corner styles, etc.)
     const needsAdvancedCustomization = options.customization && (
-      options.customization.logoUrl ||
-      options.customization.cornerStyle ||
+      options.customization.logoUrl ??
+      options.customization.cornerStyle ??
       options.customization.patternStyle
     );
     
@@ -219,7 +221,7 @@ export class QRCodeGenerationService {
   /**
    * Stores QR code image and returns URL
    */
-  private async storeQRCodeImage(
+  public async storeQRCodeImage(
     buffer: Buffer,
     qrCodeId: string,
     format: QRCodeFormat
@@ -243,7 +245,7 @@ export class QRCodeGenerationService {
     errorCorrection: string;
     size: number;
     format: string;
-    style?: any;
+    style?: QRCodeStyle;
   }): Promise<Buffer> {
     // Check if we have it in cache first
     if (this.qrCodeCache.has(qrCode.id)) {
@@ -295,7 +297,8 @@ export class QRCodeGenerationService {
     }
     
     for (let i = 0; i < capacities.length; i++) {
-      if (contentLength <= capacities[i]) {
+      const capacity = capacities[i];
+      if (capacity !== undefined && contentLength <= capacity) {
         return i + 1; // QR versions are 1-indexed
       }
     }
