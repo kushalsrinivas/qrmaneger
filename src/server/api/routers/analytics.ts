@@ -195,8 +195,8 @@ export const analyticsRouter = createTRPCRouter({
         const defaultStartDate = new Date();
         defaultStartDate.setDate(defaultStartDate.getDate() - 30);
         
-        const startDate = input.dateRange?.startDate ?? defaultStartDate;
-        const endDate = input.dateRange?.endDate ?? defaultEndDate;
+        const startDate = input.dateRange?.startDate || defaultStartDate;
+        const endDate = input.dateRange?.endDate || defaultEndDate;
         
         // Get user's QR codes or specific QR code
         let qrCodeIds: string[];
@@ -286,8 +286,8 @@ export const analyticsRouter = createTRPCRouter({
         const defaultStartDate = new Date();
         defaultStartDate.setDate(defaultStartDate.getDate() - 30);
         
-        const startDate = input.dateRange?.startDate ?? defaultStartDate;
-        const endDate = input.dateRange?.endDate ?? defaultEndDate;
+        const startDate = input.dateRange?.startDate || defaultStartDate;
+        const endDate = input.dateRange?.endDate || defaultEndDate;
         
         // Get user's QR codes or specific QR code
         let qrCodeIds: string[];
@@ -394,8 +394,8 @@ export const analyticsRouter = createTRPCRouter({
         const defaultStartDate = new Date();
         defaultStartDate.setDate(defaultStartDate.getDate() - 30);
         
-        const startDate = input.dateRange?.startDate ?? defaultStartDate;
-        const endDate = input.dateRange?.endDate ?? defaultEndDate;
+        const startDate = input.dateRange?.startDate || defaultStartDate;
+        const endDate = input.dateRange?.endDate || defaultEndDate;
         
         // Get user's QR codes or specific QR code
         let qrCodeIds: string[];
@@ -477,11 +477,11 @@ export const analyticsRouter = createTRPCRouter({
         const defaultStartDate = new Date();
         defaultStartDate.setDate(defaultStartDate.getDate() - 30);
         
-        const startDate = input.dateRange?.startDate ?? defaultStartDate;
-        const endDate = input.dateRange?.endDate ?? defaultEndDate;
+        const startDate = input.dateRange?.startDate || defaultStartDate;
+        const endDate = input.dateRange?.endDate || defaultEndDate;
         
         // Get QR codes to analyze
-        const whereConditions = [eq(qrCodes.userId, userId)];
+        let whereConditions = [eq(qrCodes.userId, userId)];
         
         if (input.qrCodeIds && input.qrCodeIds.length > 0) {
           whereConditions.push(inArray(qrCodes.id, input.qrCodeIds));
@@ -561,8 +561,8 @@ export const analyticsRouter = createTRPCRouter({
           }
           
           return input.sortOrder === "asc" 
-            ? Number(aValue) - Number(bValue)
-            : Number(bValue) - Number(aValue);
+            ? (aValue as number) - (bValue as number)
+            : (bValue as number) - (aValue as number);
         });
         
         return performanceWithMetrics.slice(0, input.limit);

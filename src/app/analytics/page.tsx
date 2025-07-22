@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -44,66 +44,116 @@ export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState("7d");
   const [selectedQRCode, setSelectedQRCode] = useState<string>("all");
 
-  // Calculate date range
-  const getDateRange = (range: string) => {
-    const endDate = new Date();
-    const startDate = new Date();
+  // Memoize date range calculation to prevent infinite re-renders
+  const currentDateRange = useMemo(() => {
+    const getDateRange = (range: string) => {
+      const endDate = new Date();
+      const startDate = new Date();
 
-    switch (range) {
-      case "24h":
-        startDate.setHours(startDate.getHours() - 24);
-        break;
-      case "7d":
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case "30d":
-        startDate.setDate(startDate.getDate() - 30);
-        break;
-      case "90d":
-        startDate.setDate(startDate.getDate() - 90);
-        break;
-      default:
-        startDate.setDate(startDate.getDate() - 7);
-    }
+      switch (range) {
+        case "24h":
+          startDate.setHours(startDate.getHours() - 24);
+          break;
+        case "7d":
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case "30d":
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        case "90d":
+          startDate.setDate(startDate.getDate() - 90);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 7);
+      }
 
-    return { startDate, endDate };
-  };
+      return { startDate, endDate };
+    };
 
-  const currentDateRange = getDateRange(dateRange);
+    return getDateRange(dateRange);
+  }, [dateRange]);
+
+  // Memoize query inputs to prevent recreation on every render
+  const overviewInput = useMemo(
+    () => ({
+      dateRange: currentDateRange,
+    }),
+    [currentDateRange],
+  );
+
+  const deviceAnalyticsInput = useMemo(
+    () => ({
+      dateRange: currentDateRange,
+      qrCodeId: selectedQRCode === "all" ? undefined : selectedQRCode,
+    }),
+    [currentDateRange, selectedQRCode],
+  );
+
+  const locationAnalyticsInput = useMemo(
+    () => ({
+      dateRange: currentDateRange,
+      qrCodeId: selectedQRCode === "all" ? undefined : selectedQRCode,
+    }),
+    [currentDateRange, selectedQRCode],
+  );
+
+  const performanceInput = useMemo(
+    () => ({
+      dateRange: currentDateRange,
+      limit: 10,
+    }),
+    [currentDateRange],
+  );
+
+  const realTimeInput = useMemo(
+    () => ({
+      limit: 10,
+    }),
+    [],
+  );
+
+  const qrCodesInput = useMemo(
+    () => ({
+      limit: 100,
+    }),
+    [],
+  );
+
+  const queryOptions = useMemo(
+    () => ({
+      staleTime: 10 * 60 * 1000, // Data stays fresh for 10 mins
+      refetchInterval: 10 * 60 * 1000, // Refetch automatically every 10 mins
+    }),
+    [],
+  );
 
   // tRPC queries
   const { data: overview, isLoading: overviewLoading } =
-    api.analytics.getOverview.useQuery({
-      dateRange: currentDateRange,
-    });
+    api.analytics.getOverview.useQuery(overviewInput, queryOptions);
 
   const { data: deviceAnalytics, isLoading: deviceLoading } =
-    api.analytics.getDeviceAnalytics.useQuery({
-      dateRange: currentDateRange,
-      qrCodeId: selectedQRCode === "all" ? undefined : selectedQRCode,
-    });
+    api.analytics.getDeviceAnalytics.useQuery(
+      deviceAnalyticsInput,
+      queryOptions,
+    );
 
   const { data: locationAnalytics, isLoading: locationLoading } =
-    api.analytics.getLocationAnalytics.useQuery({
-      dateRange: currentDateRange,
-      qrCodeId: selectedQRCode === "all" ? undefined : selectedQRCode,
-    });
+    api.analytics.getLocationAnalytics.useQuery(
+      locationAnalyticsInput,
+      queryOptions,
+    );
 
   const { data: performance, isLoading: performanceLoading } =
-    api.analytics.getPerformance.useQuery({
-      dateRange: currentDateRange,
-      limit: 10,
-    });
+    api.analytics.getPerformance.useQuery(performanceInput, queryOptions);
 
   const { data: realTimeEvents, isLoading: realTimeLoading } =
-    api.analytics.getRealTime.useQuery({
-      limit: 10,
-    });
+    api.analytics.getRealTime.useQuery(realTimeInput, queryOptions);
 
   // Get QR codes for filter
-  const { data: qrCodes } = api.qr.getMyQRCodes.useQuery({
-    limit: 100,
-  });
+  const { data: qrCodes } = api.qr.getMyQRCodes.useQuery(
+    qrCodesInput,
+    queryOptions,
+  );
 
   // Export mutation
   const exportMutation = api.analytics.exportData.useMutation({
@@ -117,26 +167,26 @@ export default function AnalyticsPage() {
     },
   });
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     exportMutation.mutate({
       format: "csv",
       dateRange: currentDateRange,
       qrCodeIds: selectedQRCode !== "all" ? [selectedQRCode] : undefined,
     });
-  };
+  }, [exportMutation, currentDateRange, selectedQRCode]);
 
   // Transform data for charts
   const deviceChartData =
     deviceAnalytics?.devices?.map((item) => ({
-      name: item.device || "Unknown",
+      name: item.device ?? "Unknown",
       value: item.count,
-    })) || [];
+    })) ?? [];
 
   const locationChartData =
     locationAnalytics?.slice(0, 10).map((item) => ({
-      name: item.location || "Unknown",
+      name: item.location ?? "Unknown",
       value: item.count,
-    })) || [];
+    })) ?? [];
 
   // Calculate metrics
   const totalScans = overview?.totalScans ?? 0;
