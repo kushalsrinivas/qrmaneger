@@ -1,49 +1,143 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Line, LineChart, XAxis, YAxis } from "recharts"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import {
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Bar,
+  BarChart,
+} from "recharts";
+import { TrendingUp, TrendingDown } from "lucide-react";
 
-const data = [
-  { name: "Jan", scans: 4000, unique: 2400 },
-  { name: "Feb", scans: 3000, unique: 1398 },
-  { name: "Mar", scans: 2000, unique: 9800 },
-  { name: "Apr", scans: 2780, unique: 3908 },
-  { name: "May", scans: 1890, unique: 4800 },
-  { name: "Jun", scans: 2390, unique: 3800 },
-  { name: "Jul", scans: 3490, unique: 4300 },
-]
+interface AnalyticsChartProps {
+  data: Array<{
+    name: string;
+    scans: number;
+    unique: number;
+  }>;
+  title?: string;
+  description?: string;
+  type?: "line" | "bar";
+  showTrend?: boolean;
+  className?: string;
+}
 
-export function AnalyticsChart() {
+export function AnalyticsChart({
+  data,
+  title = "Scan Analytics",
+  description = "Total vs unique scans over time",
+  type = "line",
+  showTrend = true,
+  className,
+}: AnalyticsChartProps) {
+  // Calculate trend
+  const totalScans = data.reduce((sum, item) => sum + item.scans, 0);
+  const avgScans = data.length > 0 ? totalScans / data.length : 0;
+  const lastValue = data[data.length - 1]?.scans ?? 0;
+  const trend = lastValue > avgScans;
+
+  const chartConfig = {
+    scans: {
+      label: "Total Scans",
+      color: "hsl(var(--chart-1))",
+    },
+    unique: {
+      label: "Unique Scans",
+      color: "hsl(var(--chart-2))",
+    },
+  };
+
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
-        <CardTitle>Scan Analytics</CardTitle>
-        <CardDescription>Total vs unique scans over the last 7 months</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </div>
+          {showTrend && (
+            <div
+              className={`flex items-center space-x-1 text-sm ${trend ? "text-green-600" : "text-red-600"}`}
+            >
+              {trend ? (
+                <TrendingUp className="h-4 w-4" />
+              ) : (
+                <TrendingDown className="h-4 w-4" />
+              )}
+              <span>{trend ? "Trending up" : "Trending down"}</span>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
-        <ChartContainer
-          config={{
-            scans: {
-              label: "Total Scans",
-              color: "hsl(var(--chart-1))",
-            },
-            unique: {
-              label: "Unique Scans",
-              color: "hsl(var(--chart-2))",
-            },
-          }}
-          className="h-[300px]"
-        >
-          <LineChart data={data}>
-            <XAxis dataKey="name" />
-            <YAxis />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Line type="monotone" dataKey="scans" stroke="var(--color-scans)" strokeWidth={2} />
-            <Line type="monotone" dataKey="unique" stroke="var(--color-unique)" strokeWidth={2} />
-          </LineChart>
+        <ChartContainer config={chartConfig} className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            {type === "line" ? (
+              <LineChart data={data}>
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  className="text-xs"
+                />
+                <YAxis axisLine={false} tickLine={false} className="text-xs" />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line
+                  type="monotone"
+                  dataKey="scans"
+                  stroke="var(--color-scans)"
+                  strokeWidth={3}
+                  dot={{ fill: "var(--color-scans)", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, strokeWidth: 2 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="unique"
+                  stroke="var(--color-unique)"
+                  strokeWidth={3}
+                  dot={{ fill: "var(--color-unique)", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, strokeWidth: 2 }}
+                />
+              </LineChart>
+            ) : (
+              <BarChart data={data}>
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  className="text-xs"
+                />
+                <YAxis axisLine={false} tickLine={false} className="text-xs" />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar
+                  dataKey="scans"
+                  fill="var(--color-scans)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="unique"
+                  fill="var(--color-unique)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
     </Card>
-  )
+  );
 }

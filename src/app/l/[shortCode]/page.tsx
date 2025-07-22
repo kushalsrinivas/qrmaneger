@@ -143,20 +143,21 @@ async function trackPageView(qrCodeId: string, request: Request) {
 
     // Record analytics event
     await db.insert(analyticsEvents).values({
-      id: nanoid(),
       qrCodeId,
       eventType: "view",
-      timestamp: new Date(),
-      userAgent,
-      referer,
-      ipAddress,
       sessionId,
-      deviceInfo: JSON.stringify(deviceInfo),
-      locationInfo: JSON.stringify(locationInfo),
-      metadata: JSON.stringify({
-        pageType: "multi_url_landing",
-        viewType: "page_view",
-      }),
+      data: {
+        userAgent,
+        device: deviceInfo,
+        location: locationInfo,
+        ip: ipAddress,
+        referrer: referer,
+        referrerDomain: referer ? new URL(referer).hostname : undefined,
+        customData: {
+          pageType: "multi_url_landing",
+          viewType: "page_view",
+        },
+      },
     });
 
     // Update QR code view count
@@ -349,15 +350,16 @@ export default async function MultiUrlLandingPageRoute({ params }: PageProps) {
       try {
         // Track link click
         await db.insert(analyticsEvents).values({
-          id: nanoid(),
           qrCodeId: qrCode.id,
           eventType: "click",
-          timestamp: new Date(),
-          metadata: JSON.stringify({
-            linkId,
-            pageType: "multi_url_landing",
-            actionType: "link_click",
-          }),
+          sessionId: `click-${linkId}-${Date.now()}`,
+          data: {
+            customData: {
+              linkId,
+              pageType: "multi_url_landing",
+              actionType: "link_click",
+            },
+          },
         });
 
         // Update link click count in QR code data
@@ -390,15 +392,16 @@ export default async function MultiUrlLandingPageRoute({ params }: PageProps) {
       try {
         // Track form submission
         await db.insert(analyticsEvents).values({
-          id: nanoid(),
           qrCodeId: qrCode.id,
           eventType: "click",
-          timestamp: new Date(),
-          metadata: JSON.stringify({
-            pageType: "multi_url_landing",
-            actionType: "contact_form_submit",
-            formData,
-          }),
+          sessionId: `form-${Date.now()}`,
+          data: {
+            customData: {
+              pageType: "multi_url_landing",
+              actionType: "contact_form_submit",
+              formData,
+            },
+          },
         });
 
         // In a real implementation, you'd send the form data via email or save to database

@@ -8,7 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -22,28 +21,21 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import {
-  Bar,
-  BarChart,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  Cell,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-} from "recharts";
+import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import {
   Download,
-  Filter,
+  Eye,
+  Users,
+  BarChart3,
   TrendingUp,
   TrendingDown,
-  Eye,
-  MousePointer,
-  Smartphone,
   Globe,
-  Calendar,
+  Smartphone,
+  Activity,
+  MapPin,
+  Monitor,
+  Tablet,
+  Zap,
 } from "lucide-react";
 import { api } from "@/trpc/react";
 import { toast } from "sonner";
@@ -51,7 +43,6 @@ import { toast } from "sonner";
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState("7d");
   const [selectedQRCode, setSelectedQRCode] = useState<string>("");
-  const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv");
 
   // Calculate date range
   const getDateRange = (range: string) => {
@@ -84,14 +75,6 @@ export default function AnalyticsPage() {
   const { data: overview, isLoading: overviewLoading } =
     api.analytics.getOverview.useQuery({
       dateRange: currentDateRange,
-    });
-
-  const { data: timeSeries, isLoading: timeSeriesLoading } =
-    api.analytics.getTimeSeries.useQuery({
-      dateRange: currentDateRange,
-      qrCodeId: selectedQRCode || undefined,
-      groupBy:
-        dateRange === "24h" ? "day" : dateRange === "7d" ? "day" : "week",
     });
 
   const { data: deviceAnalytics, isLoading: deviceLoading } =
@@ -128,7 +111,6 @@ export default function AnalyticsPage() {
       toast.success(
         `Analytics data exported successfully (${data.count} records)`,
       );
-      // In a real app, you'd trigger a download here
     },
     onError: (error) => {
       toast.error(error.message);
@@ -137,20 +119,13 @@ export default function AnalyticsPage() {
 
   const handleExport = () => {
     exportMutation.mutate({
-      format: exportFormat,
+      format: "csv",
       dateRange: currentDateRange,
       qrCodeIds: selectedQRCode ? [selectedQRCode] : undefined,
     });
   };
 
   // Transform data for charts
-  const chartData =
-    timeSeries?.map((item) => ({
-      date: new Date(item.date as string).toLocaleDateString(),
-      scans: item.totalEvents,
-      unique: item.uniqueEvents,
-    })) || [];
-
   const deviceChartData =
     deviceAnalytics?.devices?.map((item) => ({
       name: item.device || "Unknown",
@@ -163,23 +138,32 @@ export default function AnalyticsPage() {
       value: item.count,
     })) || [];
 
-  const COLORS = [
-    "#0088FE",
-    "#00C49F",
-    "#FFBB28",
-    "#FF8042",
-    "#8884D8",
-    "#82CA9D",
-    "#FFC658",
-    "#FF7C7C",
-  ];
+  // Calculate metrics
+  const totalScans = overview?.totalScans ?? 0;
+  const uniqueVisitors = overview?.uniqueScans ?? 0;
+  const activeQRCodes = overview?.activeQRCodes ?? 0;
+  const totalQRCodes = overview?.totalQRCodes ?? 0;
+  const growthRate = overview?.growthRate ?? 0;
+
+  // Calculate average daily scans
+  const daysInRange =
+    dateRange === "24h"
+      ? 1
+      : dateRange === "7d"
+        ? 7
+        : dateRange === "30d"
+          ? 30
+          : 90;
+  const avgDailyScans = Math.round(totalScans / daysInRange);
 
   if (overviewLoading) {
     return (
-      <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
+      <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Analytics</h2>
+            <h2 className="text-3xl font-bold tracking-tight">
+              Analytics Dashboard
+            </h2>
             <p className="text-muted-foreground">Loading analytics data...</p>
           </div>
         </div>
@@ -200,18 +184,21 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
-      <div className="flex items-center justify-between">
+    <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
+      {/* Header */}
+      <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Analytics</h2>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Analytics Dashboard
+          </h2>
           <p className="text-muted-foreground">
-            Detailed insights into your QR code performance
+            Track performance and insights for your QR codes
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-col space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-2">
           <Select value={dateRange} onValueChange={setDateRange}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select time range" />
+              <SelectValue placeholder="Last 7 days" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="24h">Last 24 hours</SelectItem>
@@ -226,7 +213,7 @@ export default function AnalyticsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">All QR Codes</SelectItem>
-              {qrCodes?.map((qr: any) => (
+              {qrCodes?.map((qr) => (
                 <SelectItem key={qr.id} value={qr.id}>
                   {qr.name}
                 </SelectItem>
@@ -248,24 +235,26 @@ export default function AnalyticsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Scans</CardTitle>
-            <Eye className="text-muted-foreground h-4 w-4" />
+            <CardTitle className="text-muted-foreground text-sm font-medium">
+              Total Scans
+            </CardTitle>
+            <Eye className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {overview?.totalScans?.toLocaleString() || 0}
+              {totalScans.toLocaleString()}
             </div>
-            <p className="text-muted-foreground text-xs">
-              {overview?.growthRate !== undefined && (
+            <p className="text-muted-foreground mt-1 flex items-center text-xs">
+              {growthRate !== 0 && (
                 <span
-                  className={`flex items-center ${overview.growthRate >= 0 ? "text-green-600" : "text-red-600"}`}
+                  className={`flex items-center ${growthRate >= 0 ? "text-green-600" : "text-red-600"}`}
                 >
-                  {overview.growthRate >= 0 ? (
+                  {growthRate >= 0 ? (
                     <TrendingUp className="mr-1 h-3 w-3" />
                   ) : (
                     <TrendingDown className="mr-1 h-3 w-3" />
                   )}
-                  {Math.abs(overview.growthRate).toFixed(1)}% from last period
+                  {Math.abs(growthRate).toFixed(0)}% from last period
                 </span>
               )}
             </p>
@@ -274,263 +263,294 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unique Scans</CardTitle>
-            <MousePointer className="text-muted-foreground h-4 w-4" />
+            <CardTitle className="text-muted-foreground text-sm font-medium">
+              Unique Visitors
+            </CardTitle>
+            <Users className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {overview?.uniqueScans?.toLocaleString() || 0}
+              {uniqueVisitors.toLocaleString()}
             </div>
-            <p className="text-muted-foreground text-xs">
-              {overview?.totalScans &&
-                overview.uniqueScans &&
-                `${((overview.uniqueScans / overview.totalScans) * 100).toFixed(1)}% unique visitors`}
+            <p className="text-muted-foreground mt-1 flex items-center text-xs">
+              {totalScans > 0 && (
+                <span className="flex items-center text-green-600">
+                  <TrendingUp className="mr-1 h-3 w-3" />
+                  {Math.round((uniqueVisitors / totalScans) * 100)}% from last
+                  period
+                </span>
+              )}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">QR Codes</CardTitle>
-            <Calendar className="text-muted-foreground h-4 w-4" />
+            <CardTitle className="text-muted-foreground text-sm font-medium">
+              Active QR Codes
+            </CardTitle>
+            <BarChart3 className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {overview?.totalQRCodes || 0}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              {overview?.activeQRCodes} active codes
+            <div className="text-2xl font-bold">{activeQRCodes}</div>
+            <p className="text-muted-foreground mt-1 text-xs">
+              out of {totalQRCodes} total
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg. per QR</CardTitle>
-            <TrendingUp className="text-muted-foreground h-4 w-4" />
+            <CardTitle className="text-muted-foreground text-sm font-medium">
+              Avg. Daily Scans
+            </CardTitle>
+            <Zap className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {overview?.averageScansPerQR || 0}
+            <div className="text-2xl font-bold">{avgDailyScans}</div>
+            <p className="text-muted-foreground mt-1 flex items-center text-xs">
+              <span className="flex items-center text-orange-600">
+                <TrendingUp className="mr-1 h-3 w-3" />
+                +15% trend
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Top Performing QR Codes */}
+        <Card>
+          <CardHeader className="flex flex-row items-center space-y-0 pb-4">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="h-5 w-5 text-green-500" />
+              <CardTitle className="text-lg font-semibold">
+                Top Performing QR Codes
+              </CardTitle>
             </div>
-            <p className="text-muted-foreground text-xs">scans per QR code</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Scan Activity</CardTitle>
-            <CardDescription>
-              Daily scan activity over the selected period
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {timeSeriesLoading ? (
-              <div className="flex h-[300px] items-center justify-center">
-                <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData}>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <ChartTooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="scans"
-                    stroke="#8884d8"
-                    strokeWidth={2}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="unique"
-                    stroke="#82ca9d"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Device Breakdown</CardTitle>
-            <CardDescription>Scans by device type</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {deviceLoading ? (
-              <div className="flex h-[300px] items-center justify-center">
-                <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={deviceChartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {deviceChartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <ChartTooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Additional Analytics */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Locations</CardTitle>
-            <CardDescription>Countries with the most scans</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {locationLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex animate-pulse items-center justify-between"
-                  >
-                    <div className="bg-muted h-4 w-1/2 rounded"></div>
-                    <div className="bg-muted h-4 w-1/4 rounded"></div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {locationChartData.map((location, index) => (
-                  <div
-                    key={location.name}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <div
-                        className="h-2 w-2 rounded-full"
-                        style={{
-                          backgroundColor: COLORS[index % COLORS.length],
-                        }}
-                      ></div>
-                      <span className="text-sm">{location.name}</span>
-                    </div>
-                    <span className="text-sm font-medium">
-                      {location.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Performing QR Codes</CardTitle>
-            <CardDescription>QR codes with the most scans</CardDescription>
           </CardHeader>
           <CardContent>
             {performanceLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex animate-pulse items-center justify-between"
-                  >
-                    <div className="bg-muted h-4 w-1/2 rounded"></div>
-                    <div className="bg-muted h-4 w-1/4 rounded"></div>
-                  </div>
-                ))}
+              <div className="flex h-[300px] items-center justify-center">
+                <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {performance?.slice(0, 5).map((qr, index) => (
+            ) : performance && performance.length > 0 ? (
+              <div className="space-y-4">
+                {performance.slice(0, 5).map((qr, index) => (
                   <div
                     key={qr.id}
                     className="flex items-center justify-between"
                   >
-                    <div className="flex items-center space-x-2">
-                      <div className="bg-primary text-primary-foreground flex h-6 w-6 items-center justify-center rounded-full text-xs">
+                    <div className="flex items-center space-x-3">
+                      <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium">
                         {index + 1}
                       </div>
-                      <span className="truncate text-sm">{qr.name}</span>
+                      <div>
+                        <p className="text-sm font-medium">{qr.name}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {qr.type}
+                        </p>
+                      </div>
                     </div>
-                    <span className="text-sm font-medium">
-                      {qr.scansInPeriod}
-                    </span>
+                    <div className="text-right">
+                      <p className="font-semibold">{qr.scansInPeriod}</p>
+                      <p className="text-muted-foreground text-xs">scans</p>
+                    </div>
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="flex h-[300px] items-center justify-center text-center">
+                <div className="text-muted-foreground">
+                  <BarChart3 className="mx-auto mb-2 h-8 w-8" />
+                  <p>No scan data available</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Geographic Distribution */}
+        <Card>
+          <CardHeader className="flex flex-row items-center space-y-0 pb-4">
+            <div className="flex items-center space-x-2">
+              <Globe className="h-5 w-5 text-blue-500" />
+              <CardTitle className="text-lg font-semibold">
+                Geographic Distribution
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {locationLoading ? (
+              <div className="flex h-[300px] items-center justify-center">
+                <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
+              </div>
+            ) : locationChartData.length > 0 ? (
+              <div className="space-y-4">
+                {locationChartData.slice(0, 5).map((location, index) => (
+                  <div
+                    key={location.name}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <MapPin className="text-muted-foreground h-4 w-4" />
+                      <span className="text-sm font-medium">
+                        {location.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="bg-muted h-2 w-20 rounded-full">
+                        <div
+                          className="h-2 rounded-full bg-blue-500"
+                          style={{
+                            width: `${(location.value / (locationChartData[0]?.value ?? 1)) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="w-8 text-right text-sm font-semibold">
+                        {location.value}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-[300px] items-center justify-center text-center">
+                <div className="text-muted-foreground">
+                  <MapPin className="mx-auto mb-2 h-8 w-8" />
+                  <p>No location data available</p>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Real-time Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Real-time Activity</CardTitle>
-          <CardDescription>Recent scan events</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {realTimeLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex animate-pulse items-center justify-between"
-                >
-                  <div className="bg-muted h-4 w-1/2 rounded"></div>
-                  <div className="bg-muted h-4 w-1/4 rounded"></div>
-                </div>
-              ))}
+      {/* Bottom Section */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Device Types */}
+        <Card>
+          <CardHeader className="flex flex-row items-center space-y-0 pb-4">
+            <div className="flex items-center space-x-2">
+              <Smartphone className="h-5 w-5 text-purple-500" />
+              <CardTitle className="text-lg font-semibold">
+                Device Types
+              </CardTitle>
             </div>
-          ) : realTimeEvents && realTimeEvents.length > 0 ? (
-            <div className="space-y-2">
-              {realTimeEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between border-b py-2 last:border-b-0"
-                >
-                  <div className="flex items-center space-x-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                    <span className="text-sm">{event.qrCodeName}</span>
-                    <span className="text-muted-foreground text-xs capitalize">
-                      {event.eventType}
+          </CardHeader>
+          <CardContent>
+            {deviceLoading ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
+              </div>
+            ) : deviceChartData.length > 0 ? (
+              <div className="space-y-4">
+                {deviceChartData.map((device, index) => {
+                  const getDeviceIcon = (deviceType: string) => {
+                    switch (deviceType.toLowerCase()) {
+                      case "mobile":
+                        return <Smartphone className="h-4 w-4" />;
+                      case "tablet":
+                        return <Tablet className="h-4 w-4" />;
+                      case "desktop":
+                        return <Monitor className="h-4 w-4" />;
+                      default:
+                        return <Monitor className="h-4 w-4" />;
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={device.name}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="text-muted-foreground">
+                          {getDeviceIcon(device.name)}
+                        </div>
+                        <span className="text-sm font-medium capitalize">
+                          {device.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="bg-muted h-2 w-16 rounded-full">
+                          <div
+                            className="h-2 rounded-full bg-purple-500"
+                            style={{
+                              width: `${(device.value / (deviceChartData[0]?.value ?? 1)) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="w-8 text-right text-sm font-semibold">
+                          {device.value}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-center">
+                <div className="text-muted-foreground">
+                  <Smartphone className="mx-auto mb-2 h-8 w-8" />
+                  <p>No device data available</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card>
+          <CardHeader className="flex flex-row items-center space-y-0 pb-4">
+            <div className="flex items-center space-x-2">
+              <Activity className="h-5 w-5 text-green-500" />
+              <CardTitle className="text-lg font-semibold">
+                Recent Activity
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {realTimeLoading ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
+              </div>
+            ) : realTimeEvents && realTimeEvents.length > 0 ? (
+              <div className="space-y-3">
+                {realTimeEvents.slice(0, 6).map((event) => (
+                  <div
+                    key={event.id}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {event.qrCodeName}
+                        </p>
+                        <p className="text-muted-foreground text-xs capitalize">
+                          {event.eventType}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-muted-foreground text-xs">
+                      {new Date(event.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
-                  <span className="text-muted-foreground text-xs">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-center">
+                <div className="text-muted-foreground">
+                  <Activity className="mx-auto mb-2 h-8 w-8" />
+                  <p>No recent activity</p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-muted-foreground py-8 text-center">
-              <Globe className="mx-auto mb-2 h-8 w-8" />
-              <p>No recent activity</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

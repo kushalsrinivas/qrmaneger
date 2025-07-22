@@ -4,7 +4,7 @@ import {
   protectedProcedure 
 } from "@/server/api/trpc";
 import { analyticsEvents, qrCodes } from "@/server/db/schema";
-import { eq, and, desc, asc, count, sum, sql, gte, lte, between } from "drizzle-orm";
+import { eq, and, desc, asc, count, sum, sql, gte, lte, between, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 // ================================
@@ -67,13 +67,18 @@ export const analyticsRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
       
       try {
-        // Default to last 30 days if no date range provided
+        // Default to last 7 days if no date range provided
         const defaultEndDate = new Date();
         const defaultStartDate = new Date();
-        defaultStartDate.setDate(defaultStartDate.getDate() - 30);
+        defaultStartDate.setDate(defaultStartDate.getDate() - 7);
         
-        const startDate = input.dateRange?.startDate || defaultStartDate;
-        const endDate = input.dateRange?.endDate || defaultEndDate;
+        const startDate = input.dateRange?.startDate ?? defaultStartDate;
+        const endDate = input.dateRange?.endDate ?? defaultEndDate;
+        
+        // Calculate previous period for growth comparison
+        const periodDuration = endDate.getTime() - startDate.getTime();
+        const previousStartDate = new Date(startDate.getTime() - periodDuration);
+        const previousEndDate = new Date(startDate);
         
         // Get user's QR codes
         const userQRCodes = await ctx.db.query.qrCodes.findMany({
@@ -103,9 +108,21 @@ export const analyticsRouter = createTRPCRouter({
         })
         .from(analyticsEvents)
         .where(and(
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           eq(analyticsEvents.eventType, "scan"),
           between(analyticsEvents.timestamp, startDate, endDate)
+        ));
+        
+        // Get previous period metrics for growth calculation
+        const previousMetrics = await ctx.db.select({
+          totalScans: count(),
+          uniqueScans: sql<number>`COUNT(DISTINCT ${analyticsEvents.sessionId})`,
+        })
+        .from(analyticsEvents)
+        .where(and(
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
+          eq(analyticsEvents.eventType, "scan"),
+          between(analyticsEvents.timestamp, previousStartDate, previousEndDate)
         ));
         
         // Get QR codes statistics
@@ -128,29 +145,19 @@ export const analyticsRouter = createTRPCRouter({
         .orderBy(desc(qrCodes.scanCount))
         .limit(1);
         
-        // Calculate comparison metrics if compareWith is provided
+        // Calculate growth rate
+        const currentScans = currentMetrics[0]?.totalScans ?? 0;
+        const previousScans = previousMetrics[0]?.totalScans ?? 0;
         let growthRate = 0;
-        if (input.compareWith) {
-          const compareMetrics = await ctx.db.select({
-            totalScans: count(),
-          })
-          .from(analyticsEvents)
-          .where(and(
-            sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
-            eq(analyticsEvents.eventType, "scan"),
-            between(analyticsEvents.timestamp, input.compareWith.startDate, input.compareWith.endDate)
-          ));
-          
-          const currentScans = currentMetrics[0]?.totalScans || 0;
-          const previousScans = compareMetrics[0]?.totalScans || 0;
-          
-          if (previousScans > 0) {
-            growthRate = ((currentScans - previousScans) / previousScans) * 100;
-          }
+        
+        if (previousScans > 0) {
+          growthRate = ((currentScans - previousScans) / previousScans) * 100;
+        } else if (currentScans > 0) {
+          growthRate = 100; // 100% growth if we had 0 before and now have some
         }
         
-        const currentData = currentMetrics[0] || { totalScans: 0, uniqueScans: 0 };
-        const qrData = qrStats[0] || { totalQRCodes: 0, activeQRCodes: 0, totalScansFromQR: 0 };
+        const currentData = currentMetrics[0] ?? { totalScans: 0, uniqueScans: 0 };
+        const qrData = qrStats[0] ?? { totalQRCodes: 0, activeQRCodes: 0, totalScansFromQR: 0 };
         
         return {
           totalScans: currentData.totalScans,
@@ -158,10 +165,10 @@ export const analyticsRouter = createTRPCRouter({
           totalQRCodes: qrData.totalQRCodes,
           activeQRCodes: qrData.activeQRCodes,
           averageScansPerQR: qrData.totalQRCodes > 0 
-            ? Math.round((qrData.totalScansFromQR || 0) / qrData.totalQRCodes) 
+            ? Math.round(((qrData.totalScansFromQR as number) ?? 0) / qrData.totalQRCodes) 
             : 0,
-          topPerformer: topPerformer[0] || null,
-          growthRate: Math.round(growthRate * 100) / 100,
+          topPerformer: topPerformer[0] ?? null,
+          growthRate: Math.round(growthRate * 10) / 10, // Round to 1 decimal place
           conversionRate: 0, // TODO: Calculate based on conversion tracking
         };
         
@@ -232,7 +239,7 @@ export const analyticsRouter = createTRPCRouter({
         
         // Build where conditions
         const whereConditions = [
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           between(analyticsEvents.timestamp, startDate, endDate),
         ];
         
@@ -314,47 +321,47 @@ export const analyticsRouter = createTRPCRouter({
         
         // Get device analytics
         const deviceData = await ctx.db.select({
-          device: sql<string>`${analyticsEvents.metadata}->>'device'`,
+          device: sql<string>`${analyticsEvents.data}->'device'->>'type'`,
           count: count(),
         })
         .from(analyticsEvents)
         .where(and(
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           eq(analyticsEvents.eventType, "scan"),
           between(analyticsEvents.timestamp, startDate, endDate),
-          sql`${analyticsEvents.metadata}->>'device' IS NOT NULL`
+          sql`${analyticsEvents.data}->'device'->>'type' IS NOT NULL`
         ))
-        .groupBy(sql`${analyticsEvents.metadata}->>'device'`)
+        .groupBy(sql`${analyticsEvents.data}->'device'->>'type'`)
         .orderBy(desc(count()));
         
         // Get browser analytics
         const browserData = await ctx.db.select({
-          browser: sql<string>`${analyticsEvents.metadata}->>'browser'`,
+          browser: sql<string>`${analyticsEvents.data}->'device'->>'browser'`,
           count: count(),
         })
         .from(analyticsEvents)
         .where(and(
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           eq(analyticsEvents.eventType, "scan"),
           between(analyticsEvents.timestamp, startDate, endDate),
-          sql`${analyticsEvents.metadata}->>'browser' IS NOT NULL`
+          sql`${analyticsEvents.data}->'device'->>'browser' IS NOT NULL`
         ))
-        .groupBy(sql`${analyticsEvents.metadata}->>'browser'`)
+        .groupBy(sql`${analyticsEvents.data}->'device'->>'browser'`)
         .orderBy(desc(count()));
         
         // Get OS analytics
         const osData = await ctx.db.select({
-          os: sql<string>`${analyticsEvents.metadata}->>'os'`,
+          os: sql<string>`${analyticsEvents.data}->'device'->>'os'`,
           count: count(),
         })
         .from(analyticsEvents)
         .where(and(
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           eq(analyticsEvents.eventType, "scan"),
           between(analyticsEvents.timestamp, startDate, endDate),
-          sql`${analyticsEvents.metadata}->>'os' IS NOT NULL`
+          sql`${analyticsEvents.data}->'device'->>'os' IS NOT NULL`
         ))
-        .groupBy(sql`${analyticsEvents.metadata}->>'os'`)
+        .groupBy(sql`${analyticsEvents.data}->'device'->>'os'`)
         .orderBy(desc(count()));
         
         return {
@@ -422,10 +429,10 @@ export const analyticsRouter = createTRPCRouter({
         
         // Build location field based on groupBy
         const locationField = input.groupBy === "country" 
-          ? sql<string>`${analyticsEvents.metadata}->>'country'`
+          ? sql<string>`${analyticsEvents.data}->'location'->>'country'`
           : input.groupBy === "city"
-          ? sql<string>`${analyticsEvents.metadata}->>'city'`
-          : sql<string>`${analyticsEvents.metadata}->>'region'`;
+          ? sql<string>`${analyticsEvents.data}->'location'->>'city'`
+          : sql<string>`${analyticsEvents.data}->'location'->>'region'`;
         
         // Get location analytics
         const locationData = await ctx.db.select({
@@ -435,7 +442,7 @@ export const analyticsRouter = createTRPCRouter({
         })
         .from(analyticsEvents)
         .where(and(
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           eq(analyticsEvents.eventType, "scan"),
           between(analyticsEvents.timestamp, startDate, endDate),
           sql`${locationField} IS NOT NULL`
@@ -477,10 +484,10 @@ export const analyticsRouter = createTRPCRouter({
         let whereConditions = [eq(qrCodes.userId, userId)];
         
         if (input.qrCodeIds && input.qrCodeIds.length > 0) {
-          whereConditions.push(sql`${qrCodes.id} = ANY(${input.qrCodeIds})`);
+          whereConditions.push(inArray(qrCodes.id, input.qrCodeIds));
         }
         
-        // Get QR codes with analytics
+        // Get QR codes with analytics - simplified approach
         const qrPerformance = await ctx.db.select({
           id: qrCodes.id,
           name: qrCodes.name,
@@ -488,41 +495,54 @@ export const analyticsRouter = createTRPCRouter({
           status: qrCodes.status,
           totalScans: qrCodes.scanCount,
           createdAt: qrCodes.createdAt,
-          scansInPeriod: sql<number>`(
-            SELECT COUNT(*)
-            FROM ${analyticsEvents}
-            WHERE ${analyticsEvents.qrCodeId} = ${qrCodes.id}
-            AND ${analyticsEvents.eventType} = 'scan'
-            AND ${analyticsEvents.timestamp} BETWEEN ${startDate} AND ${endDate}
-          )`,
-          uniqueScansInPeriod: sql<number>`(
-            SELECT COUNT(DISTINCT ${analyticsEvents.sessionId})
-            FROM ${analyticsEvents}
-            WHERE ${analyticsEvents.qrCodeId} = ${qrCodes.id}
-            AND ${analyticsEvents.eventType} = 'scan'
-            AND ${analyticsEvents.timestamp} BETWEEN ${startDate} AND ${endDate}
-          )`,
-          clicksInPeriod: sql<number>`(
-            SELECT COUNT(*)
-            FROM ${analyticsEvents}
-            WHERE ${analyticsEvents.qrCodeId} = ${qrCodes.id}
-            AND ${analyticsEvents.eventType} = 'click'
-            AND ${analyticsEvents.timestamp} BETWEEN ${startDate} AND ${endDate}
-          )`,
         })
         .from(qrCodes)
         .where(and(...whereConditions));
         
-        // Calculate conversion rates and sort
-        const performanceWithMetrics = qrPerformance.map(qr => ({
-          ...qr,
-          conversionRate: qr.scansInPeriod > 0 
-            ? (qr.clicksInPeriod / qr.scansInPeriod) * 100 
-            : 0,
-          uniqueRate: qr.scansInPeriod > 0 
-            ? (qr.uniqueScansInPeriod / qr.scansInPeriod) * 100 
-            : 0,
-        }));
+        // Get analytics data separately for each QR code
+        const performanceWithMetrics = await Promise.all(
+          qrPerformance.map(async (qr) => {
+            // Get scans in period
+            const scansInPeriod = await ctx.db.select({ count: count() })
+              .from(analyticsEvents)
+              .where(and(
+                eq(analyticsEvents.qrCodeId, qr.id),
+                eq(analyticsEvents.eventType, "scan"),
+                between(analyticsEvents.timestamp, startDate, endDate)
+              ));
+
+            // Get unique scans in period
+            const uniqueScansInPeriod = await ctx.db.selectDistinct({ sessionId: analyticsEvents.sessionId })
+              .from(analyticsEvents)
+              .where(and(
+                eq(analyticsEvents.qrCodeId, qr.id),
+                eq(analyticsEvents.eventType, "scan"),
+                between(analyticsEvents.timestamp, startDate, endDate)
+              ));
+
+            // Get clicks in period
+            const clicksInPeriod = await ctx.db.select({ count: count() })
+              .from(analyticsEvents)
+              .where(and(
+                eq(analyticsEvents.qrCodeId, qr.id),
+                eq(analyticsEvents.eventType, "click"),
+                between(analyticsEvents.timestamp, startDate, endDate)
+              ));
+
+            const scansCount = scansInPeriod[0]?.count ?? 0;
+            const uniqueScansCount = uniqueScansInPeriod.length;
+            const clicksCount = clicksInPeriod[0]?.count ?? 0;
+
+            return {
+              ...qr,
+              scansInPeriod: scansCount,
+              uniqueScansInPeriod: uniqueScansCount,
+              clicksInPeriod: clicksCount,
+              conversionRate: scansCount > 0 ? (clicksCount / scansCount) * 100 : 0,
+              uniqueRate: scansCount > 0 ? (uniqueScansCount / scansCount) * 100 : 0,
+            };
+          })
+        );
         
         // Sort by specified criteria
         performanceWithMetrics.sort((a, b) => {
@@ -580,11 +600,11 @@ export const analyticsRouter = createTRPCRouter({
         
         // Build where conditions
         const whereConditions = [
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
         ];
         
         if (input.eventTypes && input.eventTypes.length > 0) {
-          whereConditions.push(sql`${analyticsEvents.eventType} = ANY(${input.eventTypes})`);
+          whereConditions.push(inArray(analyticsEvents.eventType, input.eventTypes));
         }
         
         // Get recent events
@@ -594,7 +614,7 @@ export const analyticsRouter = createTRPCRouter({
           timestamp: analyticsEvents.timestamp,
           qrCodeId: analyticsEvents.qrCodeId,
           qrCodeName: qrCodes.name,
-          metadata: analyticsEvents.metadata,
+          metadata: analyticsEvents.data,
         })
         .from(analyticsEvents)
         .innerJoin(qrCodes, eq(analyticsEvents.qrCodeId, qrCodes.id))
@@ -634,7 +654,7 @@ export const analyticsRouter = createTRPCRouter({
           const userQRCodes = await ctx.db.query.qrCodes.findMany({
             where: and(
               eq(qrCodes.userId, userId),
-              sql`${qrCodes.id} = ANY(${input.qrCodeIds})`
+              inArray(qrCodes.id, input.qrCodeIds)
             ),
             columns: { id: true },
           });
@@ -653,12 +673,12 @@ export const analyticsRouter = createTRPCRouter({
         
         // Build where conditions
         const whereConditions = [
-          sql`${analyticsEvents.qrCodeId} = ANY(${qrCodeIds})`,
+          inArray(analyticsEvents.qrCodeId, qrCodeIds),
           between(analyticsEvents.timestamp, input.dateRange.startDate, input.dateRange.endDate),
         ];
         
         if (input.eventTypes && input.eventTypes.length > 0) {
-          whereConditions.push(sql`${analyticsEvents.eventType} = ANY(${input.eventTypes})`);
+          whereConditions.push(inArray(analyticsEvents.eventType, input.eventTypes));
         }
         
         // Get analytics data
@@ -669,9 +689,9 @@ export const analyticsRouter = createTRPCRouter({
           eventType: analyticsEvents.eventType,
           timestamp: analyticsEvents.timestamp,
           sessionId: analyticsEvents.sessionId,
-          userAgent: analyticsEvents.userAgent,
-          ipAddress: analyticsEvents.ipAddress,
-          metadata: analyticsEvents.metadata,
+          userAgent: sql<string>`${analyticsEvents.data}->>'userAgent'`,
+          ipAddress: sql<string>`${analyticsEvents.data}->>'ip'`,
+          metadata: analyticsEvents.data,
         })
         .from(analyticsEvents)
         .innerJoin(qrCodes, eq(analyticsEvents.qrCodeId, qrCodes.id))

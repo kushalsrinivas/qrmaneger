@@ -4,6 +4,7 @@ import { convertDataToQRString } from "@/lib/qr-handlers";
 import { rateLimitingService } from "@/lib/rate-limiting";
 import { db } from "@/server/db";
 import { analyticsEvents, redirects } from "@/server/db/schema";
+import type { QRCodeType } from "@/server/db/types";
 import { nanoid } from "nanoid";
 import { eq, sql } from "drizzle-orm";
 
@@ -93,7 +94,7 @@ export async function GET(
       return NextResponse.redirect(landingPageUrl, { status: 302 });
     } else {
       // For other QR code types, use the existing redirect logic
-      const redirectUrl = await getRedirectUrl(result.qrCode.type, result.originalData);
+      const redirectUrl = await getRedirectUrl(result.qrCode.type as QRCodeType, result.originalData);
       return NextResponse.redirect(redirectUrl, { status: 302 });
     }
     
@@ -117,7 +118,7 @@ function getClientIP(request: NextRequest): string {
   const cfConnectingIP = request.headers.get("cf-connecting-ip");
   
   if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim();
+    return forwardedFor.split(",")[0]?.trim() || "127.0.0.1";
   }
   
   if (realIP) {
@@ -128,8 +129,8 @@ function getClientIP(request: NextRequest): string {
     return cfConnectingIP;
   }
   
-  // Fallback to request IP
-  return request.ip || "127.0.0.1";
+  // Fallback to localhost
+  return "127.0.0.1";
 }
 
 /**
@@ -339,7 +340,7 @@ async function updateRedirectTracking(shortCode: string, updates: any): Promise<
 /**
  * Get redirect URL based on QR code type
  */
-async function getRedirectUrl(qrType: string, originalData: any): Promise<string> {
+async function getRedirectUrl(qrType: QRCodeType, originalData: any): Promise<string> {
   switch (qrType) {
     case "url":
       return originalData.url || "https://example.com";
@@ -354,96 +355,8 @@ async function getRedirectUrl(qrType: string, originalData: any): Promise<string
       return `data:text/plain;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;
   }
 }
-    
-    if (redirectUrl) {
-      // Redirect to the target URL
-      return NextResponse.redirect(redirectUrl, { status: 302 });
-    } else {
-      // For complex types, render a landing page
-      return renderLandingPage(result.qrCode.type, result.originalData);
-    }
-    
-  } catch (error) {
-    console.error("QR code redirect failed:", error);
-    return new NextResponse("Internal server error", { status: 500 });
-  }
-}
 
-/**
- * Records an analytics event
- */
-async function recordAnalyticsEvent(data: {
-  qrCodeId: string;
-  eventType: string;
-  userAgent: string;
-  referer: string;
-  ipAddress: string;
-  deviceInfo: any;
-  locationInfo: any;
-}) {
-  try {
-    await db.insert(analyticsEvents).values({
-      qrCodeId: data.qrCodeId,
-      eventType: data.eventType as any,
-      data: {
-        userAgent: data.userAgent,
-        device: data.deviceInfo,
-        location: data.locationInfo,
-        ip: data.ipAddress,
-        referrer: data.referer,
-      },
-      sessionId: nanoid(),
-      timestamp: new Date(),
-    });
-  } catch (error) {
-    console.error("Failed to record analytics event:", error);
-  }
-}
 
-/**
- * Gets the redirect URL for simple QR code types
- */
-async function getRedirectUrl(type: string, data: any): Promise<string | null> {
-  switch (type) {
-    case "url":
-      return data.url;
-    
-    case "phone":
-      return `tel:${data.phone}`;
-    
-    case "email":
-      const emailParts = [`mailto:${data.email.to}`];
-      const queryParams = [];
-      if (data.email.subject) {
-        queryParams.push(`subject=${encodeURIComponent(data.email.subject)}`);
-      }
-      if (data.email.body) {
-        queryParams.push(`body=${encodeURIComponent(data.email.body)}`);
-      }
-      if (queryParams.length > 0) {
-        emailParts.push(`?${queryParams.join("&")}`);
-      }
-      return emailParts.join("");
-    
-    case "sms":
-      return `sms:${data.sms.phone}?body=${encodeURIComponent(data.sms.message)}`;
-    
-    case "location":
-      return `https://maps.google.com/maps?q=${data.location.latitude},${data.location.longitude}`;
-    
-    case "pdf":
-      return data.pdf.fileUrl;
-    
-    case "image":
-      return data.image.imageUrl;
-    
-    case "video":
-      return data.video.videoUrl;
-    
-    default:
-      return null; // Complex types need landing pages
-  }
-}
 
 /**
  * Renders a landing page for complex QR code types
@@ -751,72 +664,3 @@ END:VCARD\`;
   }
 }
 
-/**
- * Extracts client IP address from request
- */
-function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const realIP = request.headers.get("x-real-ip");
-  
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || "";
-  }
-  
-  if (realIP) {
-    return realIP;
-  }
-  
-  return request.ip || "";
-}
-
-/**
- * Parses user agent string to extract device information
- */
-function parseUserAgent(userAgent: string): {
-  type: "mobile" | "tablet" | "desktop";
-  os?: string;
-  browser?: string;
-  version?: string;
-} {
-  const isMobile = /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-  const isTablet = /iPad|Android(?!.*Mobile)/i.test(userAgent);
-  
-  let type: "mobile" | "tablet" | "desktop" = "desktop";
-  if (isTablet) {
-    type = "tablet";
-  } else if (isMobile) {
-    type = "mobile";
-  }
-  
-  // Extract OS
-  let os = "";
-  if (/Windows/i.test(userAgent)) os = "Windows";
-  else if (/Mac/i.test(userAgent)) os = "macOS";
-  else if (/Android/i.test(userAgent)) os = "Android";
-  else if (/iPhone|iPad/i.test(userAgent)) os = "iOS";
-  else if (/Linux/i.test(userAgent)) os = "Linux";
-  
-  // Extract browser
-  let browser = "";
-  if (/Chrome/i.test(userAgent)) browser = "Chrome";
-  else if (/Firefox/i.test(userAgent)) browser = "Firefox";
-  else if (/Safari/i.test(userAgent)) browser = "Safari";
-  else if (/Edge/i.test(userAgent)) browser = "Edge";
-  
-  return { type, os, browser };
-}
-
-/**
- * Gets location information from IP address
- */
-async function getLocationFromIP(ipAddress: string): Promise<{
-  country?: string;
-  region?: string;
-  city?: string;
-  latitude?: number;
-  longitude?: number;
-}> {
-  // In production, you would use a GeoIP service like MaxMind or ipapi.co
-  // For now, return empty object
-  return {};
-} 
