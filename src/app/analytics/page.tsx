@@ -42,7 +42,7 @@ import { toast } from "sonner";
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState("7d");
-  const [selectedQRCode, setSelectedQRCode] = useState<string>("");
+  const [selectedQRCode, setSelectedQRCode] = useState<string>("all");
 
   // Calculate date range
   const getDateRange = (range: string) => {
@@ -80,13 +80,13 @@ export default function AnalyticsPage() {
   const { data: deviceAnalytics, isLoading: deviceLoading } =
     api.analytics.getDeviceAnalytics.useQuery({
       dateRange: currentDateRange,
-      qrCodeId: selectedQRCode || undefined,
+      qrCodeId: selectedQRCode === "all" ? undefined : selectedQRCode,
     });
 
   const { data: locationAnalytics, isLoading: locationLoading } =
     api.analytics.getLocationAnalytics.useQuery({
       dateRange: currentDateRange,
-      qrCodeId: selectedQRCode || undefined,
+      qrCodeId: selectedQRCode === "all" ? undefined : selectedQRCode,
     });
 
   const { data: performance, isLoading: performanceLoading } =
@@ -121,7 +121,7 @@ export default function AnalyticsPage() {
     exportMutation.mutate({
       format: "csv",
       dateRange: currentDateRange,
-      qrCodeIds: selectedQRCode ? [selectedQRCode] : undefined,
+      qrCodeIds: selectedQRCode !== "all" ? [selectedQRCode] : undefined,
     });
   };
 
@@ -212,7 +212,7 @@ export default function AnalyticsPage() {
               <SelectValue placeholder="All QR Codes" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All QR Codes</SelectItem>
+              <SelectItem value="all">All QR Codes</SelectItem>
               {qrCodes?.map((qr) => (
                 <SelectItem key={qr.id} value={qr.id}>
                   {qr.name}

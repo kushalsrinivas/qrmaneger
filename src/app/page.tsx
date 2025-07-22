@@ -18,7 +18,19 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4">
-          <AnalyticsChart />
+          <AnalyticsChart 
+            title="Recent Scan Activity"
+            description="Scan trends over the past week"
+            data={[
+              { name: "Mon", scans: 12, unique: 8 },
+              { name: "Tue", scans: 19, unique: 15 },
+              { name: "Wed", scans: 8, unique: 6 },
+              { name: "Thu", scans: 23, unique: 18 },
+              { name: "Fri", scans: 31, unique: 24 },
+              { name: "Sat", scans: 15, unique: 12 },
+              { name: "Sun", scans: 9, unique: 7 },
+            ]}
+          />
         </div>
         <div className="col-span-3">
           <QuickActions />

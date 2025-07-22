@@ -15,6 +15,13 @@
       "when": 1752775313813,
       "tag": "0001_loose_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1753195259765,
+      "tag": "0002_watery_tattoo",
+      "breakpoints": true
     }
   ]
 }

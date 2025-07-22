@@ -699,6 +699,44 @@ export const redirects = createTable(
 );
 
 // ================================
+// ANALYTICS CACHE
+// ================================
+
+export const analyticsCache = createTable(
+  "analytics_cache",
+  (d) => ({
+    id: d.varchar({ length: 255 }).notNull().primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: d.varchar({ length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+    cacheKey: d.varchar({ length: 255 }).notNull(),
+    dateRange: d.jsonb().$type<{
+      startDate: string;
+      endDate: string;
+    }>().notNull(),
+    data: d.jsonb().$type<{
+      overview?: any;
+      timeSeries?: any;
+      deviceAnalytics?: any;
+      locationAnalytics?: any;
+      performance?: any;
+      realTime?: any;
+    }>().notNull(),
+    lastUpdated: d.timestamp({ withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+    expiresAt: d.timestamp({ withTimezone: true }).notNull(),
+    isStale: d.boolean().default(false).notNull(),
+    updateInProgress: d.boolean().default(false).notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  }),
+  (t) => [
+    index("analytics_cache_user_idx").on(t.userId),
+    index("analytics_cache_key_idx").on(t.cacheKey),
+    index("analytics_cache_user_key_idx").on(t.userId, t.cacheKey),
+    index("analytics_cache_expires_idx").on(t.expiresAt),
+    index("analytics_cache_stale_idx").on(t.isStale),
+    index("analytics_cache_update_progress_idx").on(t.updateInProgress),
+  ]
+);
+
+// ================================
 // ANALYTICS EVENTS
 // ================================
 
@@ -851,6 +889,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   templates: many(templates),
   organizationMembers: many(organizationMembers),
   analyticsEvents: many(analyticsEvents),
+  analyticsCache: many(analyticsCache),
   redirects: many(redirects),
 }));
 
@@ -950,6 +989,13 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
+
+export const analyticsCacheRelations = relations(analyticsCache, ({ one }) => ({
+  user: one(users, { 
+    fields: [analyticsCache.userId], 
+    references: [users.id] 
+  }),
 }));
 
 export const postsRelations = relations(posts, ({ one }) => ({

@@ -24,7 +24,7 @@ import {
 import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface AnalyticsChartProps {
-  data: Array<{
+  data?: Array<{
     name: string;
     scans: number;
     unique: number;
@@ -37,17 +37,20 @@ interface AnalyticsChartProps {
 }
 
 export function AnalyticsChart({
-  data,
+  data = [],
   title = "Scan Analytics",
   description = "Total vs unique scans over time",
   type = "line",
   showTrend = true,
   className,
 }: AnalyticsChartProps) {
+  // Ensure data is always an array
+  const chartData = data || [];
+
   // Calculate trend
-  const totalScans = data.reduce((sum, item) => sum + item.scans, 0);
-  const avgScans = data.length > 0 ? totalScans / data.length : 0;
-  const lastValue = data[data.length - 1]?.scans ?? 0;
+  const totalScans = chartData.reduce((sum, item) => sum + item.scans, 0);
+  const avgScans = chartData.length > 0 ? totalScans / chartData.length : 0;
+  const lastValue = chartData[chartData.length - 1]?.scans ?? 0;
   const trend = lastValue > avgScans;
 
   const chartConfig = {
@@ -87,7 +90,7 @@ export function AnalyticsChart({
         <ChartContainer config={chartConfig} className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             {type === "line" ? (
-              <LineChart data={data}>
+              <LineChart data={chartData}>
                 <XAxis
                   dataKey="name"
                   axisLine={false}
@@ -114,7 +117,7 @@ export function AnalyticsChart({
                 />
               </LineChart>
             ) : (
-              <BarChart data={data}>
+              <BarChart data={chartData}>
                 <XAxis
                   dataKey="name"
                   axisLine={false}
