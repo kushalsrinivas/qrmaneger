@@ -71,8 +71,8 @@ import Link from "next/link";
 
 export default function CodesPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedType, setSelectedType] = useState("");
-  const [selectedFolder, setSelectedFolder] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  const [selectedFolder, setSelectedFolder] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -94,8 +94,8 @@ export default function CodesPage() {
     limit,
     offset: (page - 1) * limit,
     search: searchTerm || undefined,
-    type: selectedType || undefined,
-    folderId: selectedFolder || undefined,
+    type: selectedType !== "all" ? selectedType : undefined,
+    folderId: selectedFolder !== "all" ? selectedFolder : undefined,
   });
 
   const { data: folders } = api.folders.list.useQuery({
@@ -212,8 +212,9 @@ export default function CodesPage() {
       qrCode.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       qrCode.shortCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesType = !selectedType || qrCode.type === selectedType;
-    const matchesFolder = !selectedFolder || qrCode.folderId === selectedFolder;
+    const matchesType = selectedType === "all" || qrCode.type === selectedType;
+    const matchesFolder =
+      selectedFolder === "all" || qrCode.folderId === selectedFolder;
 
     return matchesSearch && matchesType && matchesFolder;
   });
@@ -344,7 +345,7 @@ export default function CodesPage() {
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Types</SelectItem>
+            <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="url">URL</SelectItem>
             <SelectItem value="vcard">vCard</SelectItem>
             <SelectItem value="wifi">WiFi</SelectItem>
@@ -358,7 +359,7 @@ export default function CodesPage() {
             <SelectValue placeholder="All Folders" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Folders</SelectItem>
+            <SelectItem value="all">All Folders</SelectItem>
             {folders?.map((folder: any) => (
               <SelectItem key={folder.id} value={folder.id}>
                 {folder.name}
@@ -419,19 +420,21 @@ export default function CodesPage() {
           <div className="text-center">
             <h3 className="text-lg font-semibold">No QR codes found</h3>
             <p className="text-muted-foreground text-sm">
-              {searchTerm || selectedType || selectedFolder
+              {searchTerm || selectedType !== "all" || selectedFolder !== "all"
                 ? "Try adjusting your filters"
                 : "Create your first QR code to get started"}
             </p>
           </div>
-          {!searchTerm && !selectedType && !selectedFolder && (
-            <Link href="/generate">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Create QR Code
-              </Button>
-            </Link>
-          )}
+          {!searchTerm &&
+            selectedType === "all" &&
+            selectedFolder === "all" && (
+              <Link href="/generate">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create QR Code
+                </Button>
+              </Link>
+            )}
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

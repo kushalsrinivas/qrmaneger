@@ -52,8 +52,8 @@ import { toast } from "sonner";
 
 export default function TemplatesPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedType, setSelectedType] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedType, setSelectedType] = useState<string>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
@@ -95,8 +95,9 @@ export default function TemplatesPage() {
     page,
     limit: 12,
     search: searchTerm || undefined,
-    category: selectedCategory || undefined,
-    type: selectedType || undefined,
+    category:
+      selectedCategory !== "all" ? (selectedCategory as any) : undefined,
+    type: selectedType !== "all" ? (selectedType as any) : undefined,
     sortBy,
     sortOrder,
     includePublic: true,
@@ -283,7 +284,7 @@ export default function TemplatesPage() {
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
               <SelectItem value="business">Business</SelectItem>
               <SelectItem value="personal">Personal</SelectItem>
               <SelectItem value="event">Event</SelectItem>
@@ -299,7 +300,7 @@ export default function TemplatesPage() {
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               <SelectItem value="url">URL</SelectItem>
               <SelectItem value="vcard">vCard</SelectItem>
               <SelectItem value="wifi">WiFi</SelectItem>
@@ -382,17 +383,21 @@ export default function TemplatesPage() {
           <div className="text-center">
             <h3 className="text-lg font-semibold">No templates found</h3>
             <p className="text-muted-foreground text-sm">
-              {searchTerm || selectedCategory || selectedType
+              {searchTerm ||
+              selectedCategory !== "all" ||
+              selectedType !== "all"
                 ? "Try adjusting your filters"
                 : "Create your first template to get started"}
             </p>
           </div>
-          {!searchTerm && !selectedCategory && !selectedType && (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Template
-            </Button>
-          )}
+          {!searchTerm &&
+            selectedCategory === "all" &&
+            selectedType === "all" && (
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Template
+              </Button>
+            )}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -440,7 +445,7 @@ export default function TemplatesPage() {
               <CardContent>
                 <div className="text-muted-foreground flex items-center justify-between text-sm">
                   <div className="flex items-center space-x-2">
-                    <Badge variant="outline">{template.type}</Badge>
+                    <Badge variant="outline">{template.category}</Badge>
                     <span>{template.usageCount} uses</span>
                   </div>
                   <span>

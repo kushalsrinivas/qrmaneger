@@ -80,8 +80,8 @@ export default function BulkPage() {
 
   // Form states
   const [bulkCreateForm, setBulkCreateForm] = useState({
-    template: "",
-    folder: "",
+    template: "none",
+    folder: "none",
     format: "PNG",
     size: 300,
     errorCorrection: "M",
@@ -93,9 +93,9 @@ export default function BulkPage() {
   const [processingStatus, setProcessingStatus] = useState<BulkQRCode[]>([]);
 
   const [bulkUpdateForm, setBulkUpdateForm] = useState({
-    folder: "",
+    folder: "none",
     tags: "",
-    format: "",
+    format: "keep",
     size: 0,
     errorCorrection: "",
   });
@@ -459,7 +459,7 @@ export default function BulkPage() {
                       <SelectValue placeholder="Select template" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No template</SelectItem>
+                      <SelectItem value="none">No template</SelectItem>
                       {templates?.map((template: any) => (
                         <SelectItem key={template.id} value={template.id}>
                           {template.name}
@@ -481,7 +481,7 @@ export default function BulkPage() {
                       <SelectValue placeholder="Select folder" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No folder</SelectItem>
+                      <SelectItem value="none">No folder</SelectItem>
                       {folders?.map((folder: any) => (
                         <SelectItem key={folder.id} value={folder.id}>
                           {folder.name}
@@ -824,7 +824,7 @@ export default function BulkPage() {
                   <SelectValue placeholder="Select folder" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No folder</SelectItem>
+                  <SelectItem value="none">No folder</SelectItem>
                   {folders?.map((folder: any) => (
                     <SelectItem key={folder.id} value={folder.id}>
                       {folder.name}
@@ -857,7 +857,7 @@ export default function BulkPage() {
                     <SelectValue placeholder="Keep current" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Keep current</SelectItem>
+                    <SelectItem value="keep">Keep current</SelectItem>
                     <SelectItem value="PNG">PNG</SelectItem>
                     <SelectItem value="JPG">JPG</SelectItem>
                     <SelectItem value="SVG">SVG</SelectItem>

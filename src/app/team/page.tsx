@@ -62,7 +62,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export default function TeamPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRole, setSelectedRole] = useState<string>("");
+  const [selectedRole, setSelectedRole] = useState<string>("all");
   const [selectedOrg, setSelectedOrg] = useState<string>("");
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [isCreateOrgDialogOpen, setIsCreateOrgDialogOpen] = useState(false);
@@ -116,7 +116,7 @@ export default function TeamPage() {
       page,
       limit: 10,
       search: searchTerm || undefined,
-      role: selectedRole || undefined,
+      role: selectedRole !== "all" ? (selectedRole as any) : undefined,
       sortBy: "name",
       sortOrder: "asc",
     },
@@ -422,7 +422,7 @@ export default function TeamPage() {
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Roles</SelectItem>
+            <SelectItem value="all">All Roles</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="team_lead">Team Lead</SelectItem>
             <SelectItem value="member">Member</SelectItem>
