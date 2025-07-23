@@ -140,7 +140,7 @@ export const foldersRouter = createTRPCRouter({
           : input.sortBy === "updated"
           ? input.sortOrder === "asc" ? asc(folders.updatedAt) : desc(folders.updatedAt)
           : input.sortBy === "qrCount"
-          ? input.sortOrder === "asc" ? asc(folders.qrCodeCount) : desc(folders.qrCodeCount)
+          ? input.sortOrder === "asc" ? asc(sql`count(${qrCodes.id})`) : desc(sql`count(${qrCodes.id})`)
           : input.sortOrder === "asc" ? asc(folders.createdAt) : desc(folders.createdAt);
         
         // Get folders with QR code counts
@@ -150,7 +150,6 @@ export const foldersRouter = createTRPCRouter({
           description: folders.description,
           parentId: folders.parentId,
           color: folders.color,
-          qrCodeCount: folders.qrCodeCount,
           createdAt: folders.createdAt,
           updatedAt: folders.updatedAt,
           qrCodesCount: count(qrCodes.id),
@@ -216,7 +215,6 @@ export const foldersRouter = createTRPCRouter({
           description: folders.description,
           parentId: folders.parentId,
           color: folders.color,
-          qrCodeCount: folders.qrCodeCount,
           createdAt: folders.createdAt,
           updatedAt: folders.updatedAt,
         })
@@ -275,7 +273,6 @@ export const foldersRouter = createTRPCRouter({
               columns: {
                 id: true,
                 name: true,
-                qrCodeCount: true,
               },
             },
           },
