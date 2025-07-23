@@ -1,3 +1,4 @@
+import React, { useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -22,187 +23,182 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const recentCodes = [
-  {
-    id: 1,
-    name: "Unknown QR Code",
-    type: "URL",
-    scans: 0,
-    location: "Berlin, Germany",
-    created: "Jan 20, 18:30",
-    status: "tablet",
-    device: "tablet",
-  },
-  {
-    id: 2,
-    name: "Unknown QR Code",
-    type: "vCard",
-    scans: 0,
-    location: "Sydney, Australia",
-    created: "Jan 20, 17:10",
-    status: "desktop",
-    device: "desktop",
-  },
-  {
-    id: 3,
-    name: "Unknown QR Code",
-    type: "WiFi",
-    scans: 0,
-    location: "London, United Kingdom",
-    created: "Jan 20, 16:20",
-    status: "mobile",
-    device: "mobile",
-  },
-  {
-    id: 4,
-    name: "Unknown QR Code",
-    type: "URL",
-    scans: 0,
-    location: "Toronto, Canada",
-    created: "Jan 20, 15:45",
-    status: "desktop",
-    device: "desktop",
-  },
-  {
-    id: 5,
-    name: "Unknown QR Code",
-    type: "Event",
-    scans: 0,
-    location: "New York, United States",
-    created: "Jan 15, 14:30",
-    status: "mobile",
-    device: "mobile",
-  },
-  {
-    id: 6,
-    name: "Unknown QR Code",
-    type: "PDF",
-    scans: 0,
-    location: "London, United Kingdom",
-    created: "Jan 15, 14:45",
-    status: "desktop",
-    device: "desktop",
-  },
-  {
-    id: 7,
-    name: "Unknown QR Code",
-    type: "URL",
-    scans: 0,
-    location: "Toronto, Canada",
-    created: "Jan 15, 13:50",
-    status: "mobile",
-    device: "mobile",
-  },
-];
+export const RecentQRCodes = React.memo(function RecentQRCodes() {
+  const recentCodes = useMemo(
+    () => [
+      {
+        id: 1,
+        name: "Unknown QR Code",
+        type: "URL",
+        scans: 0,
+        location: "Berlin, Germany",
+        created: "Jan 20, 18:30",
+        status: "tablet",
+        device: "tablet",
+      },
+      {
+        id: 2,
+        name: "Unknown QR Code",
+        type: "vCard",
+        scans: 0,
+        location: "Sydney, Australia",
+        created: "Jan 20, 17:10",
+        status: "desktop",
+        device: "desktop",
+      },
+      {
+        id: 3,
+        name: "Unknown QR Code",
+        type: "WiFi",
+        scans: 0,
+        location: "Tokyo, Japan",
+        created: "Jan 20, 16:45",
+        status: "mobile",
+        device: "mobile",
+      },
+      {
+        id: 4,
+        name: "Unknown QR Code",
+        type: "Email",
+        scans: 0,
+        location: "New York, USA",
+        created: "Jan 20, 15:20",
+        status: "desktop",
+        device: "desktop",
+      },
+      {
+        id: 5,
+        name: "Unknown QR Code",
+        type: "SMS",
+        scans: 0,
+        location: "London, UK",
+        created: "Jan 20, 14:30",
+        status: "mobile",
+        device: "mobile",
+      },
+    ],
+    [],
+  );
 
-const getDeviceIcon = (device: string) => {
-  switch (device) {
-    case "mobile":
-      return <Smartphone className="h-4 w-4 text-blue-500" />;
-    case "tablet":
-      return <Tablet className="h-4 w-4 text-green-500" />;
-    case "desktop":
-      return <Monitor className="h-4 w-4 text-purple-500" />;
-    default:
-      return <QrCode className="h-4 w-4 text-gray-500" />;
-  }
-};
+  const getDeviceIcon = useMemo(() => {
+    function DeviceIcon(device: string) {
+      switch (device) {
+        case "mobile":
+          return <Smartphone className="h-4 w-4" />;
+        case "tablet":
+          return <Tablet className="h-4 w-4" />;
+        case "desktop":
+          return <Monitor className="h-4 w-4" />;
+        default:
+          return <Monitor className="h-4 w-4" />;
+      }
+    }
+    return DeviceIcon;
+  }, []);
 
-const getDeviceBadgeColor = (device: string) => {
-  switch (device) {
-    case "mobile":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "tablet":
-      return "bg-green-50 text-green-700 border-green-200";
-    case "desktop":
-      return "bg-purple-50 text-purple-700 border-purple-200";
-    default:
-      return "bg-gray-50 text-gray-700 border-gray-200";
-  }
-};
+  const getTypeBadgeColor = useMemo(() => {
+    function TypeBadgeColor(type: string) {
+      switch (type.toLowerCase()) {
+        case "url":
+          return "bg-blue-100 text-blue-800";
+        case "vcard":
+          return "bg-green-100 text-green-800";
+        case "wifi":
+          return "bg-purple-100 text-purple-800";
+        case "email":
+          return "bg-orange-100 text-orange-800";
+        case "sms":
+          return "bg-pink-100 text-pink-800";
+        default:
+          return "bg-gray-100 text-gray-800";
+      }
+    }
+    return TypeBadgeColor;
+  }, []);
 
-export function RecentQRCodes() {
   return (
     <Card className="border-0 shadow-sm">
-      <CardHeader className="pb-4">
+      <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg font-semibold">
-              Recent Activity
+            <CardTitle className="flex items-center text-lg font-semibold">
+              <QrCode className="mr-2 h-5 w-5 text-green-500" />
+              Recent QR Codes
             </CardTitle>
-            <CardDescription>
-              Latest QR code interactions and scans
-            </CardDescription>
+            <CardDescription>Your latest QR code activity</CardDescription>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-blue-600 hover:text-blue-700"
-          >
+          <Button variant="outline" size="sm">
             View All
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
-        <div className="space-y-3">
-          {recentCodes.map((code) => (
+      <CardContent className="p-0">
+        <div className="space-y-0">
+          {recentCodes.map((code, index) => (
             <div
               key={code.id}
-              className="flex items-center justify-between rounded-lg bg-gray-50/50 p-4 transition-colors hover:bg-gray-100/50"
+              className={`flex items-center justify-between p-4 ${
+                index !== recentCodes.length - 1
+                  ? "border-b border-gray-100"
+                  : ""
+              } transition-colors hover:bg-gray-50`}
             >
               <div className="flex items-center space-x-4">
-                <div className="rounded-lg border bg-white p-2 shadow-sm">
-                  {getDeviceIcon(code.device)}
+                {/* QR Code Placeholder */}
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                  <QrCode className="h-6 w-6 text-gray-400" />
                 </div>
-                <div className="flex-1">
-                  <div className="mb-1 flex items-center space-x-2">
-                    <p className="font-medium text-gray-900">{code.name}</p>
-                    <Badge
-                      variant="secondary"
-                      className={`px-2 py-0.5 text-xs ${getDeviceBadgeColor(code.device)}`}
-                    >
-                      {code.device}
+
+                {/* QR Code Info */}
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <h4 className="font-medium text-gray-900">{code.name}</h4>
+                    <Badge className={getTypeBadgeColor(code.type)}>
+                      {code.type}
                     </Badge>
                   </div>
-                  <div className="text-muted-foreground flex items-center space-x-2 text-sm">
-                    <span>{code.location}</span>
-                    <span>•</span>
+                  <div className="flex items-center space-x-4 text-sm text-gray-500">
+                    <div className="flex items-center space-x-1">
+                      <Eye className="h-3 w-3" />
+                      <span>{code.scans} scans</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      {getDeviceIcon(code.device)}
+                      <span>{code.location}</span>
+                    </div>
                     <span>{code.created}</span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <div className="flex items-center space-x-1 text-sm font-medium text-gray-900">
-                    <Eye className="h-3 w-3" />
-                    <span>{code.scans}</span>
-                  </div>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-gray-400 hover:text-gray-600"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>View Details</DropdownMenuItem>
-                    <DropdownMenuItem>Edit</DropdownMenuItem>
-                    <DropdownMenuItem>Download</DropdownMenuItem>
-                    <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                    <DropdownMenuItem className="text-red-600">
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+
+              {/* Actions */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>View Details</DropdownMenuItem>
+                  <DropdownMenuItem>Edit</DropdownMenuItem>
+                  <DropdownMenuItem>Download</DropdownMenuItem>
+                  <DropdownMenuItem>Duplicate</DropdownMenuItem>
+                  <DropdownMenuItem className="text-red-600">
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ))}
+        </div>
+
+        {/* View More Button */}
+        <div className="border-t border-gray-100 p-4">
+          <Button variant="ghost" className="w-full">
+            View All QR Codes
+          </Button>
         </div>
       </CardContent>
     </Card>
   );
-}
+});

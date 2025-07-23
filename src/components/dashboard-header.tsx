@@ -1,8 +1,9 @@
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Crown } from "lucide-react";
 import Link from "next/link";
 
-export function DashboardHeader() {
+export const DashboardHeader = React.memo(function DashboardHeader() {
   return (
     <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 p-8 text-white">
       {/* Background decoration */}
@@ -41,4 +42,4 @@ export function DashboardHeader() {
       </div>
     </div>
   );
-}
+});

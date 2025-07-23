@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback, useMemo, createContext, useContext } from "react";
 import {
   Card,
   CardContent,
@@ -49,8 +49,191 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// QR Code Types Configuration
-const QR_TYPES = [
+// ===== TYPE DEFINITIONS =====
+interface QRLink {
+  title: string;
+  url: string;
+}
+
+interface BaseFormData {
+  // Common fields
+  title?: string;
+  description?: string;
+}
+
+interface UrlFormData extends BaseFormData {
+  url: string;
+}
+
+interface TextFormData extends BaseFormData {
+  text: string;
+}
+
+interface VCardFormData extends BaseFormData {
+  firstName: string;
+  lastName: string;
+  organization?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}
+
+interface WifiFormData extends BaseFormData {
+  ssid: string;
+  security: "WPA2" | "WPA3" | "WEP" | "nopass";
+  password?: string;
+  hidden?: boolean;
+}
+
+interface SmsFormData extends BaseFormData {
+  phone: string;
+  message: string;
+}
+
+interface EmailFormData extends BaseFormData {
+  to: string;
+  subject?: string;
+  body?: string;
+}
+
+interface PhoneFormData extends BaseFormData {
+  phone: string;
+}
+
+interface LocationFormData extends BaseFormData {
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
+interface EventFormData extends BaseFormData {
+  title: string;
+  description?: string;
+  location?: string;
+  startDate: string;
+  endDate?: string;
+}
+
+interface AppDownloadFormData extends BaseFormData {
+  appName: string;
+  androidUrl?: string;
+  iosUrl?: string;
+  fallbackUrl?: string;
+}
+
+interface PaymentFormData extends BaseFormData {
+  type: "upi" | "paypal" | "crypto" | "bank";
+  address: string;
+  amount?: number;
+  currency?: string;
+  note?: string;
+}
+
+interface MenuFormData extends BaseFormData {
+  restaurantName: string;
+  menuUrl: string;
+  description?: string;
+}
+
+interface FileFormData extends BaseFormData {
+  fileUrl: string;
+  title?: string;
+  description?: string;
+}
+
+interface ImageFormData extends BaseFormData {
+  imageUrl: string;
+  title?: string;
+  description?: string;
+}
+
+interface VideoFormData extends BaseFormData {
+  videoUrl: string;
+  title?: string;
+  description?: string;
+}
+
+interface MultiUrlFormData extends BaseFormData {
+  title: string;
+  description?: string;
+  links: QRLink[];
+}
+
+type FormData = 
+  | UrlFormData 
+  | TextFormData 
+  | VCardFormData 
+  | WifiFormData 
+  | SmsFormData 
+  | EmailFormData 
+  | PhoneFormData 
+  | LocationFormData 
+  | EventFormData 
+  | AppDownloadFormData 
+  | PaymentFormData 
+  | MenuFormData 
+  | FileFormData 
+  | ImageFormData 
+  | VideoFormData 
+  | MultiUrlFormData;
+
+interface QRCustomization {
+  size: number;
+  errorCorrection: "L" | "M" | "Q" | "H";
+  foregroundColor: string;
+  backgroundColor: string;
+  cornerStyle: string;
+  logoUrl: string;
+  logoSize: number;
+}
+
+interface QRType {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  popular: boolean;
+  category: string;
+}
+
+interface FormStep {
+  id: number;
+  name: string;
+  description: string;
+  isValid: boolean;
+}
+
+// ===== FORM CONTEXT =====
+interface FormContextType {
+  currentStep: number;
+  selectedType: string;
+  isDynamic: boolean;
+  formData: Partial<FormData>;
+  customization: QRCustomization;
+  errors: string[];
+  
+  // Actions
+  setCurrentStep: (step: number) => void;
+  setSelectedType: (type: string) => void;
+  setIsDynamic: (dynamic: boolean) => void;
+  updateFormData: (data: Partial<FormData>) => void;
+  updateCustomization: (customization: Partial<QRCustomization>) => void;
+  validateStep: (step: number) => boolean;
+  resetForm: () => void;
+}
+
+const FormContext = createContext<FormContextType | null>(null);
+
+const useFormContext = () => {
+  const context = useContext(FormContext);
+  if (!context) {
+    throw new Error('useFormContext must be used within FormProvider');
+  }
+  return context;
+};
+
+// ===== CONSTANTS =====
+const QR_TYPES: QRType[] = [
   {
     id: "url",
     name: "Website URL",
@@ -181,25 +364,122 @@ const QR_TYPES = [
   },
 ];
 
-const STEPS = [
-  { id: 1, name: "Choose Type", description: "Select QR code type" },
-  { id: 2, name: "Add Content", description: "Enter your information" },
-  { id: 3, name: "Customize Design", description: "Style your QR code" },
-  { id: 4, name: "Preview & Generate", description: "Review and save" },
-];
+// ===== VALIDATION FUNCTIONS =====
+const validateFormData = (type: string, data: Partial<FormData>): string[] => {
+  const errors: string[] = [];
 
-export default function GeneratePage() {
+  switch (type) {
+    case "url":
+      if (!data.url || (typeof data.url === 'string' && data.url.trim() === "")) {
+        errors.push("URL is required");
+      }
+      break;
+    case "text":
+      if (!data.text || (typeof data.text === 'string' && data.text.trim() === "")) {
+        errors.push("Text content is required");
+      }
+      break;
+    case "vcard":
+      const vcard = data as VCardFormData;
+      if (!vcard.firstName || !vcard.lastName) {
+        errors.push("First name and last name are required");
+      }
+      break;
+    case "wifi":
+      const wifi = data as WifiFormData;
+      if (!wifi.ssid || !wifi.security) {
+        errors.push("Network name and security type are required");
+      }
+      if (wifi.security !== "nopass" && !wifi.password) {
+        errors.push("Password is required for secured networks");
+      }
+      break;
+    case "sms":
+      const sms = data as SmsFormData;
+      if (!sms.phone || !sms.message) {
+        errors.push("Phone number and message are required");
+      }
+      break;
+    case "email":
+      const email = data as EmailFormData;
+      if (!email.to) {
+        errors.push("Email address is required");
+      }
+      break;
+    case "phone":
+      const phone = data as PhoneFormData;
+      if (!phone.phone) {
+        errors.push("Phone number is required");
+      }
+      break;
+    case "location":
+      const location = data as LocationFormData;
+      if (!location.latitude || !location.longitude) {
+        errors.push("Latitude and longitude are required");
+      }
+      break;
+    case "event":
+      const event = data as EventFormData;
+      if (!event.title || !event.startDate) {
+        errors.push("Event title and start date are required");
+      }
+      break;
+    case "app_download":
+      const app = data as AppDownloadFormData;
+      if (!app.appName) {
+        errors.push("App name is required");
+      }
+      break;
+    case "payment":
+      const payment = data as PaymentFormData;
+      if (!payment.type || !payment.address) {
+        errors.push("Payment type and address are required");
+      }
+      break;
+    case "menu":
+      const menu = data as MenuFormData;
+      if (!menu.restaurantName || !menu.menuUrl) {
+        errors.push("Restaurant name and menu URL are required");
+      }
+      break;
+    case "pdf":
+      const pdf = data as FileFormData;
+      if (!pdf.fileUrl) {
+        errors.push("PDF file URL is required");
+      }
+      break;
+    case "image":
+      const image = data as ImageFormData;
+      if (!image.imageUrl) {
+        errors.push("Image URL is required");
+      }
+      break;
+    case "video":
+      const video = data as VideoFormData;
+      if (!video.videoUrl) {
+        errors.push("Video URL is required");
+      }
+      break;
+    case "multi_url":
+      const multiUrl = data as MultiUrlFormData;
+      if (!multiUrl.title) {
+        errors.push("Landing page title is required");
+      }
+      break;
+  }
+
+  return errors;
+};
+
+// ===== FORM PROVIDER =====
+const FormProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedType, setSelectedType] = useState("");
   const [isDynamic, setIsDynamic] = useState(true);
-  const [qrData, setQrData] = useState<any>({});
-  const [shouldGenerate, setShouldGenerate] = useState(false);
-  const [formErrors, setFormErrors] = useState<string[]>([]);
-
-  // Customization state
-  const [customization, setCustomization] = useState({
+  const [formData, setFormData] = useState<Partial<FormData>>({});
+  const [customization, setCustomization] = useState<QRCustomization>({
     size: 512,
-    errorCorrection: "M" as "L" | "M" | "Q" | "H",
+    errorCorrection: "M",
     foregroundColor: "#000000",
     backgroundColor: "#ffffff",
     cornerStyle: "square",
@@ -207,151 +487,167 @@ export default function GeneratePage() {
     logoSize: 20,
   });
 
-  const progress = (currentStep / STEPS.length) * 100;
+  const updateFormData = useCallback((data: Partial<FormData>) => {
+    setFormData(prev => ({ ...prev, ...data }));
+  }, []);
 
-  // Navigation functions
-  const nextStep = () => {
-    if (currentStep < STEPS.length) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
+  const updateCustomization = useCallback((newCustomization: Partial<QRCustomization>) => {
+    setCustomization(prev => ({ ...prev, ...newCustomization }));
+  }, []);
 
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const canProceedToNextStep = () => {
-    switch (currentStep) {
+  const validateStep = useCallback((step: number): boolean => {
+    switch (step) {
       case 1:
         return selectedType !== "";
       case 2:
-        return validateCurrentStepData();
+        return validateFormData(selectedType, formData).length === 0;
       case 3:
         return true;
-      default:
+      case 4:
         return true;
+      default:
+        return false;
     }
+  }, [selectedType, formData]);
+
+  const resetForm = useCallback(() => {
+    setCurrentStep(1);
+    setSelectedType("");
+    setFormData({});
+    setCustomization({
+      size: 512,
+      errorCorrection: "M",
+      foregroundColor: "#000000",
+      backgroundColor: "#ffffff",
+      cornerStyle: "square",
+      logoUrl: "",
+      logoSize: 20,
+    });
+  }, []);
+
+  const errors = useMemo(() => {
+    return validateFormData(selectedType, formData);
+  }, [selectedType, formData]);
+
+  const contextValue: FormContextType = {
+    currentStep,
+    selectedType,
+    isDynamic,
+    formData,
+    customization,
+    errors,
+    setCurrentStep,
+    setSelectedType: useCallback((type: string) => {
+      setSelectedType(type);
+      setFormData({}); // Reset form data when type changes
+    }, []),
+    setIsDynamic,
+    updateFormData,
+    updateCustomization,
+    validateStep,
+    resetForm,
   };
 
-  const validateCurrentStepData = () => {
-    const errors: string[] = [];
+  return (
+    <FormContext.Provider value={contextValue}>
+      {children}
+    </FormContext.Provider>
+  );
+};
 
-    switch (selectedType) {
-      case "url":
-        if (!qrData.url || qrData.url.trim() === "") {
-          errors.push("URL is required");
-        }
-        break;
-      case "text":
-        if (!qrData.text || qrData.text.trim() === "") {
-          errors.push("Text content is required");
-        }
-        break;
-      case "vcard":
-        if (!qrData.firstName || !qrData.lastName) {
-          errors.push("First name and last name are required");
-        }
-        break;
-      case "wifi":
-        if (!qrData.ssid || !qrData.security) {
-          errors.push("Network name and security type are required");
-        }
-        if (qrData.security !== "nopass" && !qrData.password) {
-          errors.push("Password is required for secured networks");
-        }
-        break;
-      case "sms":
-        if (!qrData.phone || !qrData.message) {
-          errors.push("Phone number and message are required");
-        }
-        break;
-      case "email":
-        if (!qrData.to) {
-          errors.push("Email address is required");
-        }
-        break;
-      case "phone":
-        if (!qrData.phone) {
-          errors.push("Phone number is required");
-        }
-        break;
-      case "location":
-        if (!qrData.latitude || !qrData.longitude) {
-          errors.push("Latitude and longitude are required");
-        }
-        break;
-      case "event":
-        if (!qrData.title || !qrData.startDate) {
-          errors.push("Event title and start date are required");
-        }
-        break;
-      case "app_download":
-        if (!qrData.appName) {
-          errors.push("App name is required");
-        }
-        break;
-      case "payment":
-        if (!qrData.type || !qrData.address) {
-          errors.push("Payment type and address are required");
-        }
-        break;
-      case "menu":
-        if (!qrData.restaurantName || !qrData.menuUrl) {
-          errors.push("Restaurant name and menu URL are required");
-        }
-        break;
-      case "pdf":
-        if (!qrData.fileUrl) {
-          errors.push("PDF file URL is required");
-        }
-        break;
-      case "image":
-        if (!qrData.imageUrl) {
-          errors.push("Image URL is required");
-        }
-        break;
-      case "video":
-        if (!qrData.videoUrl) {
-          errors.push("Video URL is required");
-        }
-        break;
-      case "multi_url":
-        if (!qrData.title) {
-          errors.push("Landing page title is required");
-        }
-        break;
-    }
+// ===== STEP COMPONENTS =====
 
-    setFormErrors(errors);
-    return errors.length === 0;
+// Step 1: Type Selection
+const TypeSelectionStep: React.FC = () => {
+  const { selectedType, setSelectedType, isDynamic, setIsDynamic } = useFormContext();
+
+  const popularTypes = useMemo(() => 
+    QR_TYPES.filter(type => type.popular), 
+    []
+  );
+
+  const categorizedTypes = useMemo(() => 
+    ["basic", "communication", "advanced", "business", "media"].reduce((acc, category) => {
+      const categoryTypes = QR_TYPES.filter(
+        type => type.category === category && !type.popular
+      );
+      if (categoryTypes.length > 0) {
+        acc[category] = categoryTypes;
+      }
+      return acc;
+    }, {} as Record<string, QRType[]>), 
+    []
+  );
+
+  const QRTypeCard: React.FC<{
+    type: QRType;
+    isSelected: boolean;
+    onSelect: (typeId: string) => void;
+    variant?: "popular" | "regular";
+  }> = ({ type, isSelected, onSelect, variant = "regular" }) => {
+    const Icon = type.icon;
+    
+    return (
+      <Card
+        className={cn(
+          "cursor-pointer transition-all hover:shadow-md",
+          isSelected
+            ? "bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-950"
+            : "hover:bg-muted"
+        )}
+        onClick={() => onSelect(type.id)}
+      >
+        <CardContent className={variant === "popular" ? "p-4" : "p-3"}>
+          <div className={cn(
+            "flex items-start space-x-3",
+            variant === "regular" && "items-center space-x-2"
+          )}>
+            <div className={cn(
+              "rounded-lg p-2",
+              variant === "popular" 
+                ? "bg-blue-100 dark:bg-blue-900" 
+                : "rounded bg-gray-100 p-1.5 dark:bg-gray-800"
+            )}>
+              <Icon className={cn(
+                variant === "popular" 
+                  ? "h-5 w-5 text-blue-600 dark:text-blue-400" 
+                  : "h-4 w-4"
+              )} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className={cn(
+                "font-medium",
+                variant === "regular" && "text-sm"
+              )}>
+                {type.name}
+              </h4>
+              <p className={cn(
+                "text-muted-foreground",
+                variant === "popular" ? "text-sm" : "truncate text-xs"
+              )}>
+                {type.description}
+              </p>
+            </div>
+            {isSelected && (
+              <Check className={cn(
+                "text-blue-600",
+                variant === "popular" ? "h-5 w-5" : "h-4 w-4"
+              )} />
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
-  const handleGenerate = () => {
-    if (validateCurrentStepData()) {
-      setShouldGenerate(true);
-    }
-  };
-
-  const handleCustomizationChange = (
-    newCustomization: Partial<typeof customization>,
-  ) => {
-    setCustomization((prev) => ({ ...prev, ...newCustomization }));
-    if (shouldGenerate) {
-      setShouldGenerate(true);
-    }
-  };
-
-  // Step 1: Type Selection
-  const renderTypeSelection = () => (
+  return (
     <div className="space-y-6">
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950">
           <Settings className="h-8 w-8 text-blue-600 dark:text-blue-400" />
         </div>
-        <h2 className="mb-2 text-2xl font-bold">QR Code Type</h2>
-        <p className="text-muted-foreground">Select QR code type</p>
+        <h2 className="mb-2 text-2xl font-bold">Choose QR Code Type</h2>
+        <p className="text-muted-foreground">Select the type of QR code you want to create</p>
       </div>
 
       {/* Dynamic QR Toggle */}
@@ -363,8 +659,7 @@ export default function GeneratePage() {
                 Dynamic QR Code
               </h3>
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                Dynamic QR codes can be edited after creation without changing
-                the image
+                Dynamic QR codes can be edited after creation without changing the image
               </p>
             </div>
             <Switch checked={isDynamic} onCheckedChange={setIsDynamic} />
@@ -376,181 +671,86 @@ export default function GeneratePage() {
       <div>
         <div className="mb-4 flex items-center gap-2">
           <h3 className="font-semibold">Popular</h3>
-          <Badge
-            variant="secondary"
-            className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
-          >
-            Popular
+          <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
+            Most Used
           </Badge>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {QR_TYPES.filter((type) => type.popular).map((type) => {
-            const Icon = type.icon;
-            return (
-              <Card
-                key={type.id}
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedType === type.id
-                    ? "bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-950"
-                    : "hover:bg-muted",
-                )}
-                onClick={() => setSelectedType(type.id)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900">
-                      <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-medium">{type.name}</h4>
-                      <p className="text-muted-foreground text-sm">
-                        {type.description}
-                      </p>
-                    </div>
-                    {selectedType === type.id && (
-                      <Check className="h-5 w-5 text-blue-600" />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {popularTypes.map((type) => (
+            <QRTypeCard
+              key={type.id}
+              type={type}
+              isSelected={selectedType === type.id}
+              onSelect={setSelectedType}
+              variant="popular"
+            />
+          ))}
         </div>
       </div>
 
-      {/* All Types by Category */}
-      {["basic", "communication", "advanced", "business", "media"].map(
-        (category) => {
-          const categoryTypes = QR_TYPES.filter(
-            (type) => type.category === category && !type.popular,
-          );
-
-          if (categoryTypes.length === 0) return null;
-
-          return (
-            <div key={category}>
-              <h3 className="mb-4 font-semibold capitalize">{category}</h3>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                {categoryTypes.map((type) => {
-                  const Icon = type.icon;
-                  return (
-                    <Card
-                      key={type.id}
-                      className={cn(
-                        "cursor-pointer transition-all hover:shadow-md",
-                        selectedType === type.id
-                          ? "bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-950"
-                          : "hover:bg-muted",
-                      )}
-                      onClick={() => setSelectedType(type.id)}
-                    >
-                      <CardContent className="p-3">
-                        <div className="flex items-center space-x-2">
-                          <div className="rounded bg-gray-100 p-1.5 dark:bg-gray-800">
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-medium">{type.name}</h4>
-                            <p className="text-muted-foreground truncate text-xs">
-                              {type.description}
-                            </p>
-                          </div>
-                          {selectedType === type.id && (
-                            <Check className="h-4 w-4 text-blue-600" />
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        },
-      )}
+      {/* Categorized Types */}
+      {Object.entries(categorizedTypes).map(([category, types]) => (
+        <div key={category}>
+          <h3 className="mb-4 font-semibold capitalize">{category}</h3>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {types.map((type) => (
+              <QRTypeCard
+                key={type.id}
+                type={type}
+                isSelected={selectedType === type.id}
+                onSelect={setSelectedType}
+                variant="regular"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
+};
 
-  // Step 2: Content Input
-  const renderContentInput = () => {
-    const selectedTypeInfo = QR_TYPES.find((type) => type.id === selectedType);
-    const Icon = selectedTypeInfo?.icon || Globe;
+// Step 2: Content Input
+const ContentInputStep: React.FC = () => {
+  const { selectedType, formData, updateFormData, errors } = useFormContext();
+  
+  const selectedTypeInfo = useMemo(() => 
+    QR_TYPES.find(type => type.id === selectedType), 
+    [selectedType]
+  );
 
-    return (
-      <div className="space-y-6">
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 dark:bg-green-950">
-            <Icon className="h-8 w-8 text-green-600 dark:text-green-400" />
-          </div>
-          <h2 className="mb-2 text-2xl font-bold">Add Content</h2>
-          <p className="text-muted-foreground">Enter your information</p>
-        </div>
+  const Icon = selectedTypeInfo?.icon ?? Globe;
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Icon className="h-5 w-5" />
-              {selectedTypeInfo?.name}
-            </CardTitle>
-            <CardDescription>{selectedTypeInfo?.description}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {renderTypeSpecificForm()}
-
-            {formErrors.length > 0 && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
-                <h4 className="mb-2 font-medium text-red-800 dark:text-red-200">
-                  Please fix the following errors:
-                </h4>
-                <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
-                  {formErrors.map((error, index) => (
-                    <li key={index}>• {error}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  };
-
-  // Type-specific form rendering
-  const renderTypeSpecificForm = () => {
+  const renderFormFields = () => {
     switch (selectedType) {
       case "url":
         return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="url">Website URL *</Label>
-              <Input
-                id="url"
-                placeholder="https://example.com"
-                value={qrData.url || ""}
-                onChange={(e) => setQrData({ ...qrData, url: e.target.value })}
-              />
-            </div>
+          <div>
+            <Label htmlFor="url">Website URL *</Label>
+            <Input
+              id="url"
+              placeholder="https://example.com"
+              value={(formData as UrlFormData).url || ""}
+              onChange={(e) => updateFormData({ url: e.target.value })}
+            />
           </div>
         );
 
       case "text":
         return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="text">Text Content *</Label>
-              <Textarea
-                id="text"
-                placeholder="Enter your text message..."
-                value={qrData.text || ""}
-                onChange={(e) => setQrData({ ...qrData, text: e.target.value })}
-                rows={4}
-              />
-            </div>
+          <div>
+            <Label htmlFor="text">Text Content *</Label>
+            <Textarea
+              id="text"
+              placeholder="Enter your text message..."
+              value={(formData as TextFormData).text || ""}
+              onChange={(e) => updateFormData({ text: e.target.value })}
+              rows={4}
+            />
           </div>
         );
 
       case "vcard":
+        const vcard = formData as VCardFormData;
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -559,10 +759,8 @@ export default function GeneratePage() {
                 <Input
                   id="firstName"
                   placeholder="John"
-                  value={qrData.firstName || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, firstName: e.target.value })
-                  }
+                  value={vcard.firstName || ""}
+                  onChange={(e) => updateFormData({ firstName: e.target.value })}
                 />
               </div>
               <div>
@@ -570,10 +768,8 @@ export default function GeneratePage() {
                 <Input
                   id="lastName"
                   placeholder="Doe"
-                  value={qrData.lastName || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, lastName: e.target.value })
-                  }
+                  value={vcard.lastName || ""}
+                  onChange={(e) => updateFormData({ lastName: e.target.value })}
                 />
               </div>
             </div>
@@ -582,10 +778,8 @@ export default function GeneratePage() {
               <Input
                 id="organization"
                 placeholder="Company Name"
-                value={qrData.organization || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, organization: e.target.value })
-                }
+                value={vcard.organization || ""}
+                onChange={(e) => updateFormData({ organization: e.target.value })}
               />
             </div>
             <div>
@@ -593,10 +787,8 @@ export default function GeneratePage() {
               <Input
                 id="title"
                 placeholder="Job Title"
-                value={qrData.title || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, title: e.target.value })
-                }
+                value={vcard.title || ""}
+                onChange={(e) => updateFormData({ title: e.target.value })}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -605,10 +797,8 @@ export default function GeneratePage() {
                 <Input
                   id="phone"
                   placeholder="+1234567890"
-                  value={qrData.phone || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, phone: e.target.value })
-                  }
+                  value={vcard.phone || ""}
+                  onChange={(e) => updateFormData({ phone: e.target.value })}
                 />
               </div>
               <div>
@@ -617,10 +807,8 @@ export default function GeneratePage() {
                   id="email"
                   type="email"
                   placeholder="john@example.com"
-                  value={qrData.email || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, email: e.target.value })
-                  }
+                  value={vcard.email || ""}
+                  onChange={(e) => updateFormData({ email: e.target.value })}
                 />
               </div>
             </div>
@@ -629,16 +817,15 @@ export default function GeneratePage() {
               <Input
                 id="website"
                 placeholder="https://example.com"
-                value={qrData.website || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, website: e.target.value })
-                }
+                value={vcard.website || ""}
+                onChange={(e) => updateFormData({ website: e.target.value })}
               />
             </div>
           </div>
         );
 
       case "wifi":
+        const wifi = formData as WifiFormData;
         return (
           <div className="space-y-4">
             <div>
@@ -646,17 +833,15 @@ export default function GeneratePage() {
               <Input
                 id="ssid"
                 placeholder="MyWiFiNetwork"
-                value={qrData.ssid || ""}
-                onChange={(e) => setQrData({ ...qrData, ssid: e.target.value })}
+                value={wifi.ssid || ""}
+                onChange={(e) => updateFormData({ ssid: e.target.value })}
               />
             </div>
             <div>
               <Label htmlFor="security">Security Type *</Label>
               <Select
-                value={qrData.security || ""}
-                onValueChange={(value) =>
-                  setQrData({ ...qrData, security: value })
-                }
+                value={wifi.security || ""}
+                onValueChange={(value) => updateFormData({ security: value as WifiFormData['security'] })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select security type" />
@@ -669,595 +854,25 @@ export default function GeneratePage() {
                 </SelectContent>
               </Select>
             </div>
-            {qrData.security !== "nopass" && (
+            {wifi.security !== "nopass" && (
               <div>
                 <Label htmlFor="password">Password *</Label>
                 <Input
                   id="password"
                   type="password"
                   placeholder="Enter WiFi password"
-                  value={qrData.password || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, password: e.target.value })
-                  }
+                  value={wifi.password || ""}
+                  onChange={(e) => updateFormData({ password: e.target.value })}
                 />
               </div>
             )}
             <div className="flex items-center space-x-2">
               <Switch
                 id="hidden"
-                checked={qrData.hidden || false}
-                onCheckedChange={(checked) =>
-                  setQrData({ ...qrData, hidden: checked })
-                }
+                checked={wifi.hidden || false}
+                onCheckedChange={(checked) => updateFormData({ hidden: checked })}
               />
               <Label htmlFor="hidden">Hidden Network</Label>
-            </div>
-          </div>
-        );
-
-      case "sms":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="phone">Phone Number *</Label>
-              <Input
-                id="phone"
-                placeholder="+1234567890"
-                value={qrData.phone || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, phone: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="message">Message *</Label>
-              <Textarea
-                id="message"
-                placeholder="Enter your message..."
-                value={qrData.message || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, message: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-
-      case "email":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="to">Email Address *</Label>
-              <Input
-                id="to"
-                type="email"
-                placeholder="recipient@example.com"
-                value={qrData.to || ""}
-                onChange={(e) => setQrData({ ...qrData, to: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="subject">Subject</Label>
-              <Input
-                id="subject"
-                placeholder="Email subject"
-                value={qrData.subject || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, subject: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="body">Message</Label>
-              <Textarea
-                id="body"
-                placeholder="Email message..."
-                value={qrData.body || ""}
-                onChange={(e) => setQrData({ ...qrData, body: e.target.value })}
-                rows={4}
-              />
-            </div>
-          </div>
-        );
-
-      case "phone":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="phone">Phone Number *</Label>
-              <Input
-                id="phone"
-                placeholder="+1234567890"
-                value={qrData.phone || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, phone: e.target.value })
-                }
-              />
-            </div>
-          </div>
-        );
-
-      case "location":
-        return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="latitude">Latitude *</Label>
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="any"
-                  placeholder="40.7128"
-                  value={qrData.latitude || ""}
-                  onChange={(e) =>
-                    setQrData({
-                      ...qrData,
-                      latitude: parseFloat(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="longitude">Longitude *</Label>
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="any"
-                  placeholder="-74.0060"
-                  value={qrData.longitude || ""}
-                  onChange={(e) =>
-                    setQrData({
-                      ...qrData,
-                      longitude: parseFloat(e.target.value),
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="address">Address (optional)</Label>
-              <Input
-                id="address"
-                placeholder="123 Main St, City, State"
-                value={qrData.address || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, address: e.target.value })
-                }
-              />
-            </div>
-          </div>
-        );
-
-      case "event":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="title">Event Title *</Label>
-              <Input
-                id="title"
-                placeholder="My Event"
-                value={qrData.title || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, title: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Event description..."
-                value={qrData.description || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label htmlFor="location">Location</Label>
-              <Input
-                id="location"
-                placeholder="Event venue"
-                value={qrData.location || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, location: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="startDate">Start Date & Time *</Label>
-                <Input
-                  id="startDate"
-                  type="datetime-local"
-                  value={qrData.startDate || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, startDate: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="endDate">End Date & Time</Label>
-                <Input
-                  id="endDate"
-                  type="datetime-local"
-                  value={qrData.endDate || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, endDate: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case "app_download":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="appName">App Name *</Label>
-              <Input
-                id="appName"
-                placeholder="My Awesome App"
-                value={qrData.appName || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, appName: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="androidUrl">Android App URL</Label>
-              <Input
-                id="androidUrl"
-                placeholder="https://play.google.com/store/apps/details?id=..."
-                value={qrData.androidUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, androidUrl: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="iosUrl">iOS App URL</Label>
-              <Input
-                id="iosUrl"
-                placeholder="https://apps.apple.com/app/..."
-                value={qrData.iosUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, iosUrl: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="fallbackUrl">Fallback URL</Label>
-              <Input
-                id="fallbackUrl"
-                placeholder="https://example.com"
-                value={qrData.fallbackUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, fallbackUrl: e.target.value })
-                }
-              />
-            </div>
-          </div>
-        );
-
-      case "payment":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="paymentType">Payment Type *</Label>
-              <Select
-                value={qrData.type || ""}
-                onValueChange={(value) => setQrData({ ...qrData, type: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select payment type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="upi">UPI (India)</SelectItem>
-                  <SelectItem value="paypal">PayPal</SelectItem>
-                  <SelectItem value="crypto">Cryptocurrency</SelectItem>
-                  <SelectItem value="bank">Bank Transfer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="address">Payment Address *</Label>
-              <Input
-                id="address"
-                placeholder="Payment address or ID"
-                value={qrData.address || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, address: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="amount">Amount</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={qrData.amount || ""}
-                  onChange={(e) =>
-                    setQrData({ ...qrData, amount: parseFloat(e.target.value) })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="currency">Currency</Label>
-                <Select
-                  value={qrData.currency || ""}
-                  onValueChange={(value) =>
-                    setQrData({ ...qrData, currency: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Currency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="USD">USD</SelectItem>
-                    <SelectItem value="EUR">EUR</SelectItem>
-                    <SelectItem value="INR">INR</SelectItem>
-                    <SelectItem value="BTC">BTC</SelectItem>
-                    <SelectItem value="ETH">ETH</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="note">Note</Label>
-              <Input
-                id="note"
-                placeholder="Payment description"
-                value={qrData.note || ""}
-                onChange={(e) => setQrData({ ...qrData, note: e.target.value })}
-              />
-            </div>
-          </div>
-        );
-
-      case "menu":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="restaurantName">Restaurant Name *</Label>
-              <Input
-                id="restaurantName"
-                placeholder="My Restaurant"
-                value={qrData.restaurantName || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, restaurantName: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="menuUrl">Menu URL *</Label>
-              <Input
-                id="menuUrl"
-                placeholder="https://example.com/menu"
-                value={qrData.menuUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, menuUrl: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Restaurant description..."
-                value={qrData.description || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-
-      case "pdf":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="fileUrl">PDF File URL *</Label>
-              <Input
-                id="fileUrl"
-                placeholder="https://example.com/document.pdf"
-                value={qrData.fileUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, fileUrl: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="title">Document Title</Label>
-              <Input
-                id="title"
-                placeholder="Document title"
-                value={qrData.title || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, title: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Document description..."
-                value={qrData.description || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-
-      case "image":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="imageUrl">Image URL *</Label>
-              <Input
-                id="imageUrl"
-                placeholder="https://example.com/image.jpg"
-                value={qrData.imageUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, imageUrl: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="title">Image Title</Label>
-              <Input
-                id="title"
-                placeholder="Image title"
-                value={qrData.title || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, title: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Image description..."
-                value={qrData.description || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-
-      case "video":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="videoUrl">Video URL *</Label>
-              <Input
-                id="videoUrl"
-                placeholder="https://youtube.com/watch?v=..."
-                value={qrData.videoUrl || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, videoUrl: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="title">Video Title</Label>
-              <Input
-                id="title"
-                placeholder="Video title"
-                value={qrData.title || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, title: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Video description..."
-                value={qrData.description || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-
-      case "multi_url":
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="title">Landing Page Title *</Label>
-              <Input
-                id="title"
-                placeholder="My Links"
-                value={qrData.title || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, title: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Description of your landing page..."
-                value={qrData.description || ""}
-                onChange={(e) =>
-                  setQrData({ ...qrData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label>Links</Label>
-              <div className="space-y-2">
-                {(qrData.links || []).map((link: any, index: number) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      placeholder="Link title"
-                      value={link.title || ""}
-                      onChange={(e) => {
-                        const newLinks = [...(qrData.links || [])];
-                        newLinks[index] = { ...link, title: e.target.value };
-                        setQrData({ ...qrData, links: newLinks });
-                      }}
-                    />
-                    <Input
-                      placeholder="https://example.com"
-                      value={link.url || ""}
-                      onChange={(e) => {
-                        const newLinks = [...(qrData.links || [])];
-                        newLinks[index] = { ...link, url: e.target.value };
-                        setQrData({ ...qrData, links: newLinks });
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const newLinks = (qrData.links || []).filter(
-                          (_: any, i: number) => i !== index,
-                        );
-                        setQrData({ ...qrData, links: newLinks });
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const newLinks = [
-                      ...(qrData.links || []),
-                      { title: "", url: "" },
-                    ];
-                    setQrData({ ...qrData, links: newLinks });
-                  }}
-                >
-                  Add Link
-                </Button>
-              </div>
             </div>
           </div>
         );
@@ -1273,8 +888,50 @@ export default function GeneratePage() {
     }
   };
 
-  // Step 3: Customization
-  const renderCustomization = () => (
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 dark:bg-green-950">
+          <Icon className="h-8 w-8 text-green-600 dark:text-green-400" />
+        </div>
+        <h2 className="mb-2 text-2xl font-bold">Add Content</h2>
+        <p className="text-muted-foreground">Enter your information</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Icon className="h-5 w-5" />
+            {selectedTypeInfo?.name}
+          </CardTitle>
+          <CardDescription>{selectedTypeInfo?.description}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {renderFormFields()}
+
+          {errors.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
+              <h4 className="mb-2 font-medium text-red-800 dark:text-red-200">
+                Please fix the following errors:
+              </h4>
+              <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
+                {errors.map((error, index) => (
+                  <li key={index}>• {error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Step 3: Customization
+const CustomizationStep: React.FC = () => {
+  const { customization, updateCustomization } = useFormContext();
+
+  return (
     <div className="space-y-6">
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-50 dark:bg-purple-950">
@@ -1292,20 +949,49 @@ export default function GeneratePage() {
         cornerStyle={customization.cornerStyle}
         logoUrl={customization.logoUrl}
         logoSize={customization.logoSize}
-        onCustomizationChange={handleCustomizationChange}
+        onCustomizationChange={updateCustomization}
       />
     </div>
   );
+};
 
-  // Step 4: Preview & Generate
-  const renderPreviewGenerate = () => (
+// Step 4: Preview & Generate
+const PreviewStep: React.FC = () => {
+  const { selectedType, isDynamic, formData, customization } = useFormContext();
+  const [shouldGenerate, setShouldGenerate] = useState(false);
+
+  const selectedTypeInfo = useMemo(() => 
+    QR_TYPES.find(type => type.id === selectedType), 
+    [selectedType]
+  );
+
+  const transformedData = useMemo(() => {
+    switch (selectedType) {
+      case "url":
+        return { url: (formData as UrlFormData).url };
+      case "text":
+        return { text: (formData as TextFormData).text };
+      case "vcard":
+        return { vcard: formData };
+      case "wifi":
+        return { wifi: formData };
+      default:
+        return formData;
+    }
+  }, [selectedType, formData]);
+
+  const handleGenerate = () => {
+    setShouldGenerate(true);
+  };
+
+  return (
     <div className="space-y-6">
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-950">
           <Eye className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
         </div>
         <h2 className="mb-2 text-2xl font-bold">Preview & Generate</h2>
-        <p className="text-muted-foreground">Review and save</p>
+        <p className="text-muted-foreground">Review and save your QR code</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -1317,9 +1003,7 @@ export default function GeneratePage() {
           <CardContent className="space-y-4">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Type:</span>
-              <span className="font-medium">
-                {QR_TYPES.find((t) => t.id === selectedType)?.name}
-              </span>
+              <span className="font-medium">{selectedTypeInfo?.name}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Mode:</span>
@@ -1333,74 +1017,87 @@ export default function GeneratePage() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Error Correction:</span>
-              <span className="font-medium">
-                {customization.errorCorrection}
-              </span>
+              <span className="font-medium">{customization.errorCorrection}</span>
             </div>
           </CardContent>
         </Card>
 
         {/* QR Code Preview */}
-        <QRCodeGenerator
-          data={transformQRData()}
-          type={selectedType}
-          mode={isDynamic ? "dynamic" : "static"}
-          shouldGenerate={shouldGenerate}
-          onGenerationComplete={() => setShouldGenerate(false)}
-          options={{
-            errorCorrection: customization.errorCorrection,
-            size: customization.size,
-            format: "png",
-            customization: {
-              foregroundColor: customization.foregroundColor,
-              backgroundColor: customization.backgroundColor,
-              cornerStyle: customization.cornerStyle,
-              logoUrl: customization.logoUrl,
-              logoSize: customization.logoSize,
-            },
-          }}
-        />
+        <Card>
+          <CardHeader>
+            <CardTitle>QR Code Preview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <QRCodeGenerator
+              data={transformedData}
+              type={selectedType}
+              mode={isDynamic ? "dynamic" : "static"}
+              shouldGenerate={shouldGenerate}
+              onGenerationComplete={() => setShouldGenerate(false)}
+              options={{
+                errorCorrection: customization.errorCorrection,
+                size: customization.size,
+                format: "png",
+                customization: {
+                  foregroundColor: customization.foregroundColor,
+                  backgroundColor: customization.backgroundColor,
+                  cornerStyle: customization.cornerStyle,
+                  logoUrl: customization.logoUrl,
+                  logoSize: customization.logoSize,
+                },
+              }}
+            />
+            <div className="mt-4">
+              <Button onClick={handleGenerate} className="w-full">
+                Generate QR Code
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
+};
 
-  // Transform QR data based on type
-  const transformQRData = () => {
-    switch (selectedType) {
-      case "url":
-        return { url: qrData.url };
-      case "text":
-        return { text: qrData.text };
-      case "vcard":
-        return { vcard: qrData };
-      case "wifi":
-        return { wifi: qrData };
-      case "sms":
-        return { sms: qrData };
-      case "email":
-        return { email: qrData };
-      case "phone":
-        return qrData.phone;
-      case "location":
-        return { location: qrData };
-      case "event":
-        return { event: qrData };
-      case "app_download":
-        return { appDownload: qrData };
-      case "payment":
-        return { payment: qrData };
-      case "menu":
-        return { menu: qrData };
-      case "pdf":
-        return { pdf: qrData };
-      case "image":
-        return { image: qrData };
-      case "video":
-        return { video: qrData };
-      case "multi_url":
-        return { multiUrl: qrData };
+// ===== MAIN COMPONENT =====
+const MultiStepForm: React.FC = () => {
+  const { currentStep, setCurrentStep, validateStep } = useFormContext();
+
+  const steps: FormStep[] = [
+    { id: 1, name: "Choose Type", description: "Select QR code type", isValid: validateStep(1) },
+    { id: 2, name: "Add Content", description: "Enter your information", isValid: validateStep(2) },
+    { id: 3, name: "Customize Design", description: "Style your QR code", isValid: validateStep(3) },
+    { id: 4, name: "Preview & Generate", description: "Review and save", isValid: validateStep(4) },
+  ];
+
+  const progress = (currentStep / steps.length) * 100;
+
+  const nextStep = () => {
+    if (currentStep < steps.length && validateStep(currentStep)) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const canProceed = validateStep(currentStep);
+
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 1:
+        return <TypeSelectionStep />;
+      case 2:
+        return <ContentInputStep />;
+      case 3:
+        return <CustomizationStep />;
+      case 4:
+        return <PreviewStep />;
       default:
-        return qrData;
+        return <TypeSelectionStep />;
     }
   };
 
@@ -1409,18 +1106,18 @@ export default function GeneratePage() {
       {/* Header */}
       <div className="mb-8">
         <div className="mb-4 flex items-center gap-2">
-          <ArrowLeft className="text-muted-foreground hover:text-foreground h-5 w-5 cursor-pointer" />
+          <ArrowLeft className="h-5 w-5 cursor-pointer text-muted-foreground hover:text-foreground" />
           <h1 className="text-3xl font-bold">Create QR Code</h1>
         </div>
         <p className="text-muted-foreground">
-          Follow the steps to create your QR code
+          Follow the steps to create your perfect QR code
         </p>
       </div>
 
       {/* Progress Steps */}
       <div className="mb-8">
         <div className="mb-4 flex items-center justify-between">
-          {STEPS.map((step, index) => (
+          {steps.map((step, index) => (
             <div key={step.id} className="flex items-center">
               <div
                 className={cn(
@@ -1429,7 +1126,7 @@ export default function GeneratePage() {
                     ? "bg-blue-600 text-white"
                     : currentStep > step.id
                       ? "bg-green-600 text-white"
-                      : "bg-muted text-muted-foreground",
+                      : "bg-muted text-muted-foreground"
                 )}
               >
                 {currentStep > step.id ? (
@@ -1440,12 +1137,10 @@ export default function GeneratePage() {
               </div>
               <div className="ml-3 hidden sm:block">
                 <p className="font-medium">{step.name}</p>
-                <p className="text-muted-foreground text-sm">
-                  {step.description}
-                </p>
+                <p className="text-sm text-muted-foreground">{step.description}</p>
               </div>
-              {index < STEPS.length - 1 && (
-                <div className="bg-muted mx-4 h-px flex-1" />
+              {index < steps.length - 1 && (
+                <div className="mx-4 h-px flex-1 bg-muted" />
               )}
             </div>
           ))}
@@ -1455,10 +1150,7 @@ export default function GeneratePage() {
 
       {/* Step Content */}
       <div className="mb-8">
-        {currentStep === 1 && renderTypeSelection()}
-        {currentStep === 2 && renderContentInput()}
-        {currentStep === 3 && renderCustomization()}
-        {currentStep === 4 && renderPreviewGenerate()}
+        {renderCurrentStep()}
       </div>
 
       {/* Navigation */}
@@ -1473,12 +1165,10 @@ export default function GeneratePage() {
         </Button>
 
         <div className="flex gap-2">
-          {currentStep === STEPS.length ? (
-            <Button onClick={handleGenerate} disabled={!canProceedToNextStep()}>
-              Generate QR Code
-            </Button>
+          {currentStep === steps.length ? (
+            <div /> // No next button on last step
           ) : (
-            <Button onClick={nextStep} disabled={!canProceedToNextStep()}>
+            <Button onClick={nextStep} disabled={!canProceed}>
               Next
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -1486,5 +1176,14 @@ export default function GeneratePage() {
         </div>
       </div>
     </div>
+  );
+};
+
+// ===== EXPORT =====
+export default function GeneratePage() {
+  return (
+    <FormProvider>
+      <MultiStepForm />
+    </FormProvider>
   );
 }
