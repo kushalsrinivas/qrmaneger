@@ -22,6 +22,13 @@
       "when": 1753195259765,
       "tag": "0002_watery_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1753272400200,
+      "tag": "0003_friendly_odin",
+      "breakpoints": true
     }
   ]
 }

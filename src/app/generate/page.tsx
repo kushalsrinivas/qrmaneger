@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useCallback, useMemo, createContext, useContext } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  createContext,
+  useContext,
+} from "react";
 import {
   Card,
   CardContent,
@@ -57,6 +63,7 @@ interface QRLink {
 
 interface BaseFormData {
   // Common fields
+  name?: string;
   title?: string;
   description?: string;
 }
@@ -159,22 +166,22 @@ interface MultiUrlFormData extends BaseFormData {
   links: QRLink[];
 }
 
-type FormData = 
-  | UrlFormData 
-  | TextFormData 
-  | VCardFormData 
-  | WifiFormData 
-  | SmsFormData 
-  | EmailFormData 
-  | PhoneFormData 
-  | LocationFormData 
-  | EventFormData 
-  | AppDownloadFormData 
-  | PaymentFormData 
-  | MenuFormData 
-  | FileFormData 
-  | ImageFormData 
-  | VideoFormData 
+type FormData =
+  | UrlFormData
+  | TextFormData
+  | VCardFormData
+  | WifiFormData
+  | SmsFormData
+  | EmailFormData
+  | PhoneFormData
+  | LocationFormData
+  | EventFormData
+  | AppDownloadFormData
+  | PaymentFormData
+  | MenuFormData
+  | FileFormData
+  | ImageFormData
+  | VideoFormData
   | MultiUrlFormData;
 
 interface QRCustomization {
@@ -211,7 +218,7 @@ interface FormContextType {
   formData: Partial<FormData>;
   customization: QRCustomization;
   errors: string[];
-  
+
   // Actions
   setCurrentStep: (step: number) => void;
   setSelectedType: (type: string) => void;
@@ -227,7 +234,7 @@ const FormContext = createContext<FormContextType | null>(null);
 const useFormContext = () => {
   const context = useContext(FormContext);
   if (!context) {
-    throw new Error('useFormContext must be used within FormProvider');
+    throw new Error("useFormContext must be used within FormProvider");
   }
   return context;
 };
@@ -370,12 +377,20 @@ const validateFormData = (type: string, data: Partial<FormData>): string[] => {
 
   switch (type) {
     case "url":
-      if (!data.url || (typeof data.url === 'string' && data.url.trim() === "")) {
+      const urlData = data as Partial<UrlFormData>;
+      if (
+        !urlData.url ||
+        (typeof urlData.url === "string" && urlData.url.trim() === "")
+      ) {
         errors.push("URL is required");
       }
       break;
     case "text":
-      if (!data.text || (typeof data.text === 'string' && data.text.trim() === "")) {
+      const textData = data as Partial<TextFormData>;
+      if (
+        !textData.text ||
+        (typeof textData.text === "string" && textData.text.trim() === "")
+      ) {
         errors.push("Text content is required");
       }
       break;
@@ -471,8 +486,20 @@ const validateFormData = (type: string, data: Partial<FormData>): string[] => {
   return errors;
 };
 
+const validateStep4 = (data: Partial<FormData>): string[] => {
+  const errors: string[] = [];
+
+  if (!data.name || data.name.trim() === "") {
+    errors.push("QR Code name is required");
+  }
+
+  return errors;
+};
+
 // ===== FORM PROVIDER =====
-const FormProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const FormProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedType, setSelectedType] = useState("");
   const [isDynamic, setIsDynamic] = useState(true);
@@ -488,27 +515,33 @@ const FormProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   });
 
   const updateFormData = useCallback((data: Partial<FormData>) => {
-    setFormData(prev => ({ ...prev, ...data }));
+    setFormData((prev) => ({ ...prev, ...data }));
   }, []);
 
-  const updateCustomization = useCallback((newCustomization: Partial<QRCustomization>) => {
-    setCustomization(prev => ({ ...prev, ...newCustomization }));
-  }, []);
+  const updateCustomization = useCallback(
+    (newCustomization: Partial<QRCustomization>) => {
+      setCustomization((prev) => ({ ...prev, ...newCustomization }));
+    },
+    [],
+  );
 
-  const validateStep = useCallback((step: number): boolean => {
-    switch (step) {
-      case 1:
-        return selectedType !== "";
-      case 2:
-        return validateFormData(selectedType, formData).length === 0;
-      case 3:
-        return true;
-      case 4:
-        return true;
-      default:
-        return false;
-    }
-  }, [selectedType, formData]);
+  const validateStep = useCallback(
+    (step: number): boolean => {
+      switch (step) {
+        case 1:
+          return selectedType !== "";
+        case 2:
+          return validateFormData(selectedType, formData).length === 0;
+        case 3:
+          return true;
+        case 4:
+          return validateStep4(formData).length === 0;
+        default:
+          return false;
+      }
+    },
+    [selectedType, formData],
+  );
 
   const resetForm = useCallback(() => {
     setCurrentStep(1);
@@ -549,9 +582,7 @@ const FormProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   };
 
   return (
-    <FormContext.Provider value={contextValue}>
-      {children}
-    </FormContext.Provider>
+    <FormContext.Provider value={contextValue}>{children}</FormContext.Provider>
   );
 };
 
@@ -559,24 +590,29 @@ const FormProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // Step 1: Type Selection
 const TypeSelectionStep: React.FC = () => {
-  const { selectedType, setSelectedType, isDynamic, setIsDynamic } = useFormContext();
+  const { selectedType, setSelectedType, isDynamic, setIsDynamic } =
+    useFormContext();
 
-  const popularTypes = useMemo(() => 
-    QR_TYPES.filter(type => type.popular), 
-    []
+  const popularTypes = useMemo(
+    () => QR_TYPES.filter((type) => type.popular),
+    [],
   );
 
-  const categorizedTypes = useMemo(() => 
-    ["basic", "communication", "advanced", "business", "media"].reduce((acc, category) => {
-      const categoryTypes = QR_TYPES.filter(
-        type => type.category === category && !type.popular
-      );
-      if (categoryTypes.length > 0) {
-        acc[category] = categoryTypes;
-      }
-      return acc;
-    }, {} as Record<string, QRType[]>), 
-    []
+  const categorizedTypes = useMemo(
+    () =>
+      ["basic", "communication", "advanced", "business", "media"].reduce(
+        (acc, category) => {
+          const categoryTypes = QR_TYPES.filter(
+            (type) => type.category === category && !type.popular,
+          );
+          if (categoryTypes.length > 0) {
+            acc[category] = categoryTypes;
+          }
+          return acc;
+        },
+        {} as Record<string, QRType[]>,
+      ),
+    [],
   );
 
   const QRTypeCard: React.FC<{
@@ -586,53 +622,65 @@ const TypeSelectionStep: React.FC = () => {
     variant?: "popular" | "regular";
   }> = ({ type, isSelected, onSelect, variant = "regular" }) => {
     const Icon = type.icon;
-    
+
     return (
       <Card
         className={cn(
           "cursor-pointer transition-all hover:shadow-md",
           isSelected
             ? "bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-950"
-            : "hover:bg-muted"
+            : "hover:bg-muted",
         )}
         onClick={() => onSelect(type.id)}
       >
         <CardContent className={variant === "popular" ? "p-4" : "p-3"}>
-          <div className={cn(
-            "flex items-start space-x-3",
-            variant === "regular" && "items-center space-x-2"
-          )}>
-            <div className={cn(
-              "rounded-lg p-2",
-              variant === "popular" 
-                ? "bg-blue-100 dark:bg-blue-900" 
-                : "rounded bg-gray-100 p-1.5 dark:bg-gray-800"
-            )}>
-              <Icon className={cn(
-                variant === "popular" 
-                  ? "h-5 w-5 text-blue-600 dark:text-blue-400" 
-                  : "h-4 w-4"
-              )} />
+          <div
+            className={cn(
+              "flex items-start space-x-3",
+              variant === "regular" && "items-center space-x-2",
+            )}
+          >
+            <div
+              className={cn(
+                "rounded-lg p-2",
+                variant === "popular"
+                  ? "bg-blue-100 dark:bg-blue-900"
+                  : "rounded bg-gray-100 p-1.5 dark:bg-gray-800",
+              )}
+            >
+              <Icon
+                className={cn(
+                  variant === "popular"
+                    ? "h-5 w-5 text-blue-600 dark:text-blue-400"
+                    : "h-4 w-4",
+                )}
+              />
             </div>
             <div className="min-w-0 flex-1">
-              <h4 className={cn(
-                "font-medium",
-                variant === "regular" && "text-sm"
-              )}>
+              <h4
+                className={cn(
+                  "font-medium",
+                  variant === "regular" && "text-sm",
+                )}
+              >
                 {type.name}
               </h4>
-              <p className={cn(
-                "text-muted-foreground",
-                variant === "popular" ? "text-sm" : "truncate text-xs"
-              )}>
+              <p
+                className={cn(
+                  "text-muted-foreground",
+                  variant === "popular" ? "text-sm" : "truncate text-xs",
+                )}
+              >
                 {type.description}
               </p>
             </div>
             {isSelected && (
-              <Check className={cn(
-                "text-blue-600",
-                variant === "popular" ? "h-5 w-5" : "h-4 w-4"
-              )} />
+              <Check
+                className={cn(
+                  "text-blue-600",
+                  variant === "popular" ? "h-5 w-5" : "h-4 w-4",
+                )}
+              />
             )}
           </div>
         </CardContent>
@@ -647,7 +695,9 @@ const TypeSelectionStep: React.FC = () => {
           <Settings className="h-8 w-8 text-blue-600 dark:text-blue-400" />
         </div>
         <h2 className="mb-2 text-2xl font-bold">Choose QR Code Type</h2>
-        <p className="text-muted-foreground">Select the type of QR code you want to create</p>
+        <p className="text-muted-foreground">
+          Select the type of QR code you want to create
+        </p>
       </div>
 
       {/* Dynamic QR Toggle */}
@@ -659,7 +709,8 @@ const TypeSelectionStep: React.FC = () => {
                 Dynamic QR Code
               </h3>
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                Dynamic QR codes can be edited after creation without changing the image
+                Dynamic QR codes can be edited after creation without changing
+                the image
               </p>
             </div>
             <Switch checked={isDynamic} onCheckedChange={setIsDynamic} />
@@ -671,7 +722,10 @@ const TypeSelectionStep: React.FC = () => {
       <div>
         <div className="mb-4 flex items-center gap-2">
           <h3 className="font-semibold">Popular</h3>
-          <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
+          <Badge
+            variant="secondary"
+            className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
+          >
             Most Used
           </Badge>
         </div>
@@ -712,10 +766,10 @@ const TypeSelectionStep: React.FC = () => {
 // Step 2: Content Input
 const ContentInputStep: React.FC = () => {
   const { selectedType, formData, updateFormData, errors } = useFormContext();
-  
-  const selectedTypeInfo = useMemo(() => 
-    QR_TYPES.find(type => type.id === selectedType), 
-    [selectedType]
+
+  const selectedTypeInfo = useMemo(
+    () => QR_TYPES.find((type) => type.id === selectedType),
+    [selectedType],
   );
 
   const Icon = selectedTypeInfo?.icon ?? Globe;
@@ -759,8 +813,10 @@ const ContentInputStep: React.FC = () => {
                 <Input
                   id="firstName"
                   placeholder="John"
-                  value={vcard.firstName || ""}
-                  onChange={(e) => updateFormData({ firstName: e.target.value })}
+                  value={vcard.firstName ?? ""}
+                  onChange={(e) =>
+                    updateFormData({ firstName: e.target.value })
+                  }
                 />
               </div>
               <div>
@@ -768,7 +824,7 @@ const ContentInputStep: React.FC = () => {
                 <Input
                   id="lastName"
                   placeholder="Doe"
-                  value={vcard.lastName || ""}
+                  value={vcard.lastName ?? ""}
                   onChange={(e) => updateFormData({ lastName: e.target.value })}
                 />
               </div>
@@ -778,8 +834,10 @@ const ContentInputStep: React.FC = () => {
               <Input
                 id="organization"
                 placeholder="Company Name"
-                value={vcard.organization || ""}
-                onChange={(e) => updateFormData({ organization: e.target.value })}
+                value={vcard.organization ?? ""}
+                onChange={(e) =>
+                  updateFormData({ organization: e.target.value })
+                }
               />
             </div>
             <div>
@@ -787,7 +845,7 @@ const ContentInputStep: React.FC = () => {
               <Input
                 id="title"
                 placeholder="Job Title"
-                value={vcard.title || ""}
+                value={vcard.title ?? ""}
                 onChange={(e) => updateFormData({ title: e.target.value })}
               />
             </div>
@@ -797,7 +855,7 @@ const ContentInputStep: React.FC = () => {
                 <Input
                   id="phone"
                   placeholder="+1234567890"
-                  value={vcard.phone || ""}
+                  value={vcard.phone ?? ""}
                   onChange={(e) => updateFormData({ phone: e.target.value })}
                 />
               </div>
@@ -807,7 +865,7 @@ const ContentInputStep: React.FC = () => {
                   id="email"
                   type="email"
                   placeholder="john@example.com"
-                  value={vcard.email || ""}
+                  value={vcard.email ?? ""}
                   onChange={(e) => updateFormData({ email: e.target.value })}
                 />
               </div>
@@ -817,7 +875,7 @@ const ContentInputStep: React.FC = () => {
               <Input
                 id="website"
                 placeholder="https://example.com"
-                value={vcard.website || ""}
+                value={vcard.website ?? ""}
                 onChange={(e) => updateFormData({ website: e.target.value })}
               />
             </div>
@@ -833,15 +891,19 @@ const ContentInputStep: React.FC = () => {
               <Input
                 id="ssid"
                 placeholder="MyWiFiNetwork"
-                value={wifi.ssid || ""}
+                value={wifi.ssid ?? ""}
                 onChange={(e) => updateFormData({ ssid: e.target.value })}
               />
             </div>
             <div>
               <Label htmlFor="security">Security Type *</Label>
               <Select
-                value={wifi.security || ""}
-                onValueChange={(value) => updateFormData({ security: value as WifiFormData['security'] })}
+                value={wifi.security ?? ""}
+                onValueChange={(value) =>
+                  updateFormData({
+                    security: value as WifiFormData["security"],
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select security type" />
@@ -861,7 +923,7 @@ const ContentInputStep: React.FC = () => {
                   id="password"
                   type="password"
                   placeholder="Enter WiFi password"
-                  value={wifi.password || ""}
+                  value={wifi.password ?? ""}
                   onChange={(e) => updateFormData({ password: e.target.value })}
                 />
               </div>
@@ -869,8 +931,10 @@ const ContentInputStep: React.FC = () => {
             <div className="flex items-center space-x-2">
               <Switch
                 id="hidden"
-                checked={wifi.hidden || false}
-                onCheckedChange={(checked) => updateFormData({ hidden: checked })}
+                checked={wifi.hidden ?? false}
+                onCheckedChange={(checked) =>
+                  updateFormData({ hidden: checked })
+                }
               />
               <Label htmlFor="hidden">Hidden Network</Label>
             </div>
@@ -957,12 +1021,17 @@ const CustomizationStep: React.FC = () => {
 
 // Step 4: Preview & Generate
 const PreviewStep: React.FC = () => {
-  const { selectedType, isDynamic, formData, customization } = useFormContext();
+  const { selectedType, isDynamic, formData, customization, updateFormData } =
+    useFormContext();
   const [shouldGenerate, setShouldGenerate] = useState(false);
+  const [tags, setTags] = useState("");
+  const [selectedFolder, setSelectedFolder] = useState("");
 
-  const selectedTypeInfo = useMemo(() => 
-    QR_TYPES.find(type => type.id === selectedType), 
-    [selectedType]
+  const step4Errors = useMemo(() => validateStep4(formData), [formData]);
+
+  const selectedTypeInfo = useMemo(
+    () => QR_TYPES.find((type) => type.id === selectedType),
+    [selectedType],
   );
 
   const transformedData = useMemo(() => {
@@ -984,6 +1053,18 @@ const PreviewStep: React.FC = () => {
     setShouldGenerate(true);
   };
 
+  const handleDownload = (format: string) => {
+    // This will be handled by the QRCodeGenerator component
+    console.log(`Download ${format}`);
+  };
+
+  // Mock folders data - in real app this would come from tRPC
+  const folders = [
+    { id: "1", name: "Marketing" },
+    { id: "2", name: "Business Cards" },
+    { id: "3", name: "Events" },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -995,37 +1076,13 @@ const PreviewStep: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Summary */}
+        {/* Left Column - QR Code Preview */}
         <Card>
           <CardHeader>
-            <CardTitle>QR Code Summary</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Type:</span>
-              <span className="font-medium">{selectedTypeInfo?.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Mode:</span>
-              <Badge variant={isDynamic ? "default" : "secondary"}>
-                {isDynamic ? "Dynamic" : "Static"}
-              </Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Size:</span>
-              <span className="font-medium">{customization.size}px</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Error Correction:</span>
-              <span className="font-medium">{customization.errorCorrection}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* QR Code Preview */}
-        <Card>
-          <CardHeader>
-            <CardTitle>QR Code Preview</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              QR Code Preview
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <QRCodeGenerator
@@ -1046,14 +1103,176 @@ const PreviewStep: React.FC = () => {
                   logoSize: customization.logoSize,
                 },
               }}
+              metadata={{
+                name: formData.name,
+                tags: tags
+                  .split(",")
+                  .map((tag) => tag.trim())
+                  .filter(Boolean),
+              }}
             />
-            <div className="mt-4">
-              <Button onClick={handleGenerate} className="w-full">
-                Generate QR Code
-              </Button>
+
+            {/* URL Display */}
+            <div className="mt-4 text-center">
+              <p className="text-muted-foreground mb-1 text-sm font-medium">
+                URL
+              </p>
+              <p className="text-sm break-all">
+                {selectedType === "url"
+                  ? (formData as UrlFormData).url
+                  : "https://www.cmd64.com"}
+              </p>
+            </div>
+
+            {/* QR Code Details */}
+            <div className="mt-6 space-y-2">
+              <h4 className="flex items-center gap-2 font-medium">
+                <Settings className="h-4 w-4" />
+                QR Code Details
+              </h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Size</span>
+                  <span className="font-medium">{customization.size}px</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Error Correction
+                  </span>
+                  <span className="font-medium">
+                    {customization.errorCorrection}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Style</span>
+                  <span className="font-medium">Square</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Colors</span>
+                  <div className="flex items-center gap-1">
+                    <div
+                      className="h-3 w-3 rounded border border-gray-300"
+                      style={{ backgroundColor: customization.foregroundColor }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Right Column - QR Code Information */}
+        <div className="space-y-6">
+          {/* QR Code Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                QR Code Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="qr-name">QR Code Name *</Label>
+                <Input
+                  id="qr-name"
+                  placeholder="Enter a name for your QR code"
+                  value={formData.name ?? ""}
+                  onChange={(e) => updateFormData({ name: e.target.value })}
+                />
+                {step4Errors.length > 0 && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+                    <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
+                      {step4Errors.map((error, index) => (
+                        <li key={index}>• {error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tags">Tags (comma-separated)</Label>
+                <Input
+                  id="tags"
+                  placeholder="marketing, website, campaign"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Add tags to organize and find your QR codes easily
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="folder">Folder (Optional)</Label>
+                <Select
+                  value={selectedFolder}
+                  onValueChange={setSelectedFolder}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a folder" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no-folder">No folder</SelectItem>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Save & Export */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Download className="h-5 w-5" />
+                Save & Export
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                onClick={handleGenerate}
+                className="w-full"
+                disabled={step4Errors.length > 0}
+                size="lg"
+              >
+                <Check className="mr-2 h-4 w-4" />
+                Save QR Code
+              </Button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownload("png")}
+                  disabled={!shouldGenerate}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownload("svg")}
+                  disabled={!shouldGenerate}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download SVG
+                </Button>
+              </div>
+
+              <p className="text-muted-foreground text-center text-xs">
+                Your QR code will be saved to your library and can be downloaded
+                in multiple formats
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -1064,10 +1283,30 @@ const MultiStepForm: React.FC = () => {
   const { currentStep, setCurrentStep, validateStep } = useFormContext();
 
   const steps: FormStep[] = [
-    { id: 1, name: "Choose Type", description: "Select QR code type", isValid: validateStep(1) },
-    { id: 2, name: "Add Content", description: "Enter your information", isValid: validateStep(2) },
-    { id: 3, name: "Customize Design", description: "Style your QR code", isValid: validateStep(3) },
-    { id: 4, name: "Preview & Generate", description: "Review and save", isValid: validateStep(4) },
+    {
+      id: 1,
+      name: "Choose Type",
+      description: "Select QR code type",
+      isValid: validateStep(1),
+    },
+    {
+      id: 2,
+      name: "Add Content",
+      description: "Enter your information",
+      isValid: validateStep(2),
+    },
+    {
+      id: 3,
+      name: "Customize Design",
+      description: "Style your QR code",
+      isValid: validateStep(3),
+    },
+    {
+      id: 4,
+      name: "Preview & Generate",
+      description: "Review and save",
+      isValid: validateStep(4),
+    },
   ];
 
   const progress = (currentStep / steps.length) * 100;
@@ -1106,7 +1345,7 @@ const MultiStepForm: React.FC = () => {
       {/* Header */}
       <div className="mb-8">
         <div className="mb-4 flex items-center gap-2">
-          <ArrowLeft className="h-5 w-5 cursor-pointer text-muted-foreground hover:text-foreground" />
+          <ArrowLeft className="text-muted-foreground hover:text-foreground h-5 w-5 cursor-pointer" />
           <h1 className="text-3xl font-bold">Create QR Code</h1>
         </div>
         <p className="text-muted-foreground">
@@ -1126,7 +1365,7 @@ const MultiStepForm: React.FC = () => {
                     ? "bg-blue-600 text-white"
                     : currentStep > step.id
                       ? "bg-green-600 text-white"
-                      : "bg-muted text-muted-foreground"
+                      : "bg-muted text-muted-foreground",
                 )}
               >
                 {currentStep > step.id ? (
@@ -1137,10 +1376,12 @@ const MultiStepForm: React.FC = () => {
               </div>
               <div className="ml-3 hidden sm:block">
                 <p className="font-medium">{step.name}</p>
-                <p className="text-sm text-muted-foreground">{step.description}</p>
+                <p className="text-muted-foreground text-sm">
+                  {step.description}
+                </p>
               </div>
               {index < steps.length - 1 && (
-                <div className="mx-4 h-px flex-1 bg-muted" />
+                <div className="bg-muted mx-4 h-px flex-1" />
               )}
             </div>
           ))}
@@ -1149,9 +1390,7 @@ const MultiStepForm: React.FC = () => {
       </div>
 
       {/* Step Content */}
-      <div className="mb-8">
-        {renderCurrentStep()}
-      </div>
+      <div className="mb-8">{renderCurrentStep()}</div>
 
       {/* Navigation */}
       <div className="flex justify-between">
