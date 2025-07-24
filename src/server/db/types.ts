@@ -40,7 +40,7 @@ export type TemplateCategory = "business" | "personal" | "event" | "marketing" |
 // QR Code types
 export type QRCode = InferSelectModel<typeof qrCodes>;
 export type NewQRCode = InferInsertModel<typeof qrCodes>;
-export type QRCodeType = "url";
+export type QRCodeType = "url" | "vcard";
 export type QRCodeStatus = "active" | "inactive" | "expired" | "archived";
 
 // Analytics types
@@ -112,8 +112,65 @@ export interface OrganizationMemberPermissions {
 
 // QR Code Data Types
 export interface QRCodeData {
-  // URL type - the only supported type
+  // URL type
   url?: string;
+  // vCard type - comprehensive business card data
+  vcard?: {
+    // Basic information
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    nickname?: string;
+    title?: string;
+    organization?: string;
+    department?: string;
+    
+    // Contact information
+    email?: string;
+    phone?: string;
+    website?: string;
+    
+    // Address
+    address?: string;
+    addressComponents?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    
+    // Profile
+    profileImage?: string;
+    bio?: string;
+    birthday?: string;
+    anniversary?: string;
+    note?: string;
+    
+    // Social media and professional links
+    socialLinks?: Array<{
+      id: string;
+      platform: string;
+      label: string;
+      url: string;
+      icon?: string;
+      order: number;
+    }>;
+    
+    // Custom fields
+    customFields?: Array<{
+      id: string;
+      label: string;
+      value: string;
+      type: "text" | "email" | "phone" | "url";
+      order: number;
+    }>;
+    
+    // Additional professional info
+    assistant?: string;
+    assistantPhone?: string;
+    companyLogo?: string;
+  };
 }
 
 // QR Code Style
@@ -346,7 +403,7 @@ export interface PaginatedResponse<T = any> {
 // ================================
 
 export const QR_CODE_TYPES: QRCodeType[] = [
-  "url"
+  "url", "vcard"
 ];
 
 export const QR_CODE_STATUSES: QRCodeStatus[] = [
@@ -916,6 +973,12 @@ export const QR_CODE_LIMITS: QRCodeTypeConfig = {
     recommendedErrorCorrection: "M",
     requiredFields: ["url"],
     optionalFields: [],
+  },
+  vcard: {
+    maxLength: 2953, // QR code alphanumeric limit
+    recommendedErrorCorrection: "M",
+    requiredFields: ["firstName", "lastName"],
+    optionalFields: ["title", "organization", "email", "phone", "website", "address", "profileImage", "bio", "socialLinks", "customFields"],
   },
 };
 

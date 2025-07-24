@@ -25,7 +25,7 @@ export const createTable = pgTableCreator((name) => `mojoqr_${name}`);
 // Enums
 export const userRoleEnum = pgEnum("user_role", ["admin", "team_lead", "member", "viewer"]);
 export const qrCodeTypeEnum = pgEnum("qr_code_type", [
-  "url"
+  "url", "vcard"
 ]);
 export const qrCodeStatusEnum = pgEnum("qr_code_status", ["active", "inactive", "expired", "archived"]);
 export const analyticsEventTypeEnum = pgEnum("analytics_event_type", [
@@ -265,10 +265,67 @@ export const qrCodes = createTable(
     staticContent: d.text(), // For static QR codes
     dynamicUrl: d.varchar({ length: 500 }), // Short URL for dynamic QR codes
     originalUrl: d.varchar({ length: 2000 }), // Original URL for dynamic QR codes
-    // QR Code data - only URL type supported
+    // QR Code data - URL and vCard types supported
     data: d.jsonb().$type<{
-      // URL type - the only supported type
+      // URL type
       url?: string;
+      // vCard type - comprehensive business card data
+      vcard?: {
+        // Basic information
+        firstName: string;
+        lastName: string;
+        middleName?: string;
+        nickname?: string;
+        title?: string;
+        organization?: string;
+        department?: string;
+        
+        // Contact information
+        email?: string;
+        phone?: string;
+        website?: string;
+        
+        // Address
+        address?: string;
+        addressComponents?: {
+          street?: string;
+          city?: string;
+          state?: string;
+          postalCode?: string;
+          country?: string;
+        };
+        
+        // Profile
+        profileImage?: string;
+        bio?: string;
+        birthday?: string;
+        anniversary?: string;
+        note?: string;
+        
+        // Social media and professional links
+        socialLinks?: Array<{
+          id: string;
+          platform: string;
+          label: string;
+          url: string;
+          icon?: string;
+          order: number;
+        }>;
+        
+        // Custom fields
+        customFields?: Array<{
+          id: string;
+          label: string;
+          value: string;
+          type: "text" | "email" | "phone" | "url";
+          order: number;
+        }>;
+        
+        // Additional professional info
+        assistant?: string;
+        assistantPhone?: string;
+        companyLogo?: string;
+      };
     }>(),
     // Visual customization
     style: d.jsonb().$type<{

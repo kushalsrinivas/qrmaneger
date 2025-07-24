@@ -57,7 +57,7 @@ const urlSchema = z.object({
     }, "Invalid URL format or contains dangerous content"),
 });
 
-// vCard validation schema
+// vCard validation schema - Enhanced for business cards
 const vcardSchema = z.object({
   vcard: z.object({
     // Required fields (FN)
@@ -65,39 +65,19 @@ const vcardSchema = z.object({
     lastName: z.string().min(1, "Last name is required").max(50, "Last name too long"),
     
     // Standard vCard fields
-    organization: z.string().max(100, "Organization name too long").optional(),
+    middleName: z.string().max(50, "Middle name too long").optional(),
+    nickname: z.string().max(50, "Nickname too long").optional(),
     title: z.string().max(100, "Title too long").optional(),
+    organization: z.string().max(100, "Organization name too long").optional(),
+    department: z.string().max(100, "Department name too long").optional(),
+    
+    // Contact information
     email: z.string().email("Invalid email format").max(100, "Email too long").optional(),
     phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone format").optional(),
     website: z.string().url("Invalid website URL").max(200, "Website URL too long").optional(),
+    
+    // Address
     address: z.string().max(200, "Address too long").optional(),
-    
-    // Extended fields (vCard Plus)
-    // Social Media
-    linkedin: z.string().url("Invalid LinkedIn URL").max(200, "LinkedIn URL too long").optional(),
-    twitter: z.string().max(50, "Twitter handle too long").optional(),
-    instagram: z.string().max(50, "Instagram username too long").optional(),
-    facebook: z.string().url("Invalid Facebook URL").max(200, "Facebook URL too long").optional(),
-    
-    // Additional Contact Methods
-    whatsapp: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid WhatsApp number format").optional(),
-    skype: z.string().max(50, "Skype username too long").optional(),
-    telegram: z.string().max(50, "Telegram handle too long").optional(),
-    
-    // Professional Info
-    department: z.string().max(100, "Department name too long").optional(),
-    assistant: z.string().max(100, "Assistant name too long").optional(),
-    assistantPhone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid assistant phone format").optional(),
-    companyLogo: z.string().url("Invalid company logo URL").max(500, "Company logo URL too long").optional(),
-    
-    // Additional fields
-    middleName: z.string().max(50, "Middle name too long").optional(),
-    nickname: z.string().max(50, "Nickname too long").optional(),
-    birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid birthday format (YYYY-MM-DD)").optional(),
-    anniversary: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid anniversary format (YYYY-MM-DD)").optional(),
-    note: z.string().max(500, "Note too long").optional(),
-    
-    // Address components (structured)
     addressComponents: z.object({
       street: z.string().max(100, "Street too long").optional(),
       city: z.string().max(50, "City too long").optional(),
@@ -106,12 +86,36 @@ const vcardSchema = z.object({
       country: z.string().max(50, "Country too long").optional(),
     }).optional(),
     
+    // Profile
+    profileImage: z.string().url("Invalid profile image URL").max(500, "Profile image URL too long").optional(),
+    bio: z.string().max(500, "Bio too long").optional(),
+    birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid birthday format (YYYY-MM-DD)").optional(),
+    anniversary: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid anniversary format (YYYY-MM-DD)").optional(),
+    note: z.string().max(500, "Note too long").optional(),
+    
+    // Social media and professional links
+    socialLinks: z.array(z.object({
+      id: z.string().min(1, "Link ID is required"),
+      platform: z.string().min(1, "Platform is required").max(50, "Platform name too long"),
+      label: z.string().min(1, "Label is required").max(100, "Label too long"),
+      url: z.string().url("Invalid URL format").max(300, "URL too long"),
+      icon: z.string().max(10, "Icon too long").optional(),
+      order: z.number().min(0, "Order must be non-negative"),
+    })).max(20, "Too many social links").optional(),
+    
     // Custom fields
     customFields: z.array(z.object({
-      label: z.string().max(50, "Custom field label too long"),
-      value: z.string().max(200, "Custom field value too long"),
+      id: z.string().min(1, "Field ID is required"),
+      label: z.string().min(1, "Label is required").max(50, "Custom field label too long"),
+      value: z.string().min(1, "Value is required").max(200, "Custom field value too long"),
       type: z.enum(["text", "email", "phone", "url"]).default("text"),
-    })).max(5, "Too many custom fields").optional(),
+      order: z.number().min(0, "Order must be non-negative"),
+    })).max(10, "Too many custom fields").optional(),
+    
+    // Additional professional info
+    assistant: z.string().max(100, "Assistant name too long").optional(),
+    assistantPhone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid assistant phone format").optional(),
+    companyLogo: z.string().url("Invalid company logo URL").max(500, "Company logo URL too long").optional(),
   }),
 });
 

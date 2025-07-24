@@ -68,6 +68,7 @@ import {
 import { api } from "@/trpc/react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { QRCodeUpdateModal } from "@/components/qr-code-update-modal";
 
 export default function CodesPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -81,6 +82,8 @@ export default function CodesPage() {
   const [selectedQRCodes, setSelectedQRCodes] = useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingQRCode, setDeletingQRCode] = useState<any>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [updatingQRCode, setUpdatingQRCode] = useState<any>(null);
 
   const limit = 20;
 
@@ -107,23 +110,23 @@ export default function CodesPage() {
 
   const deleteQRCodeMutation = api.qr.delete.useMutation({
     onSuccess: () => {
-      toast.success("QR code deleted successfully");
+      toast.success("QR code deleted successfully!");
       setIsDeleteDialogOpen(false);
       setDeletingQRCode(null);
       refetch();
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.message || "Failed to delete QR code");
     },
   });
 
   const duplicateQRCodeMutation = api.qr.create.useMutation({
     onSuccess: () => {
-      toast.success("QR code duplicated successfully");
+      toast.success("QR code duplicated successfully!");
       refetch();
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.message || "Failed to duplicate QR code");
     },
   });
 
@@ -143,18 +146,73 @@ export default function CodesPage() {
 
   const handleDuplicateQRCode = (qrCode: any) => {
     duplicateQRCodeMutation.mutate({
-      type: qrCode.type,
-      name: `${qrCode.name} (Copy)`,
-      data: qrCode.data,
-      folderId: qrCode.folderId,
-      templateId: qrCode.templateId,
+      type: qrCode.type || "url",
+      mode: qrCode.isDynamic ? "dynamic" : "static",
+      data: qrCode.data || { url: "" },
+      options: {
+        errorCorrection: qrCode.errorCorrection || "M",
+        size: qrCode.size || 512,
+        format: qrCode.format || "png",
+        customization: qrCode.style,
+      },
+      metadata: {
+        name: `${qrCode.name} (Copy)`,
+        folderId: qrCode.folderId,
+        templateId: qrCode.templateId,
+        tags: qrCode.tags,
+      },
     });
   };
 
-  const handleCopyQRCode = (qrCode: any) => {
-    const url = `${window.location.origin}/q/${qrCode.shortCode}`;
-    navigator.clipboard.writeText(url);
-    toast.success("QR code URL copied to clipboard");
+  const handleCopyQRCode = async (qrCode: any) => {
+    try {
+      const url =
+        qrCode.dynamicUrl || `${window.location.origin}/q/${qrCode.shortCode}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("QR code URL copied to clipboard!");
+    } catch (error) {
+      toast.error("Failed to copy URL to clipboard");
+    }
+  };
+
+  const handleEditQRCode = (qrCode: any) => {
+    if (qrCode.isDynamic) {
+      // For dynamic QR codes, open the update modal
+      setUpdatingQRCode(qrCode);
+      setIsUpdateModalOpen(true);
+    } else {
+      // For static QR codes, redirect to the generate page
+      toast.info("Redirecting to editor for static QR code...");
+      setTimeout(() => {
+        window.location.href = `/generate?edit=${qrCode.id}`;
+      }, 500);
+    }
+  };
+
+  const handleViewQRCode = (qrCode: any) => {
+    // For URL QR codes, open the URL directly
+    if (qrCode.type === "url" && qrCode.data?.url) {
+      window.open(qrCode.data.url, "_blank");
+    } else if (qrCode.dynamicUrl) {
+      // For dynamic QR codes, use the dynamic URL
+      window.open(qrCode.dynamicUrl, "_blank");
+    } else {
+      toast.error("Unable to view this QR code");
+    }
+  };
+
+  const handleCopyQRImage = async (qrCode: any) => {
+    try {
+      if (qrCode.imageUrl) {
+        // Copy the QR code image URL
+        await navigator.clipboard.writeText(qrCode.imageUrl);
+        toast.success("QR code image URL copied to clipboard!");
+      } else {
+        toast.error("QR code image not available");
+      }
+    } catch (error) {
+      toast.error("Failed to copy QR code image URL");
+    }
   };
 
   const getTypeIcon = (type: string) => {
@@ -188,8 +246,8 @@ export default function CodesPage() {
   };
 
   const getStatusBadge = (qrCode: any) => {
-    const scansCount = qrCode.scansCount || 0;
-    const isActive = qrCode.isActive !== false;
+    const scansCount = qrCode.scanCount || 0;
+    const isActive = qrCode.status === "active";
 
     if (!isActive) {
       return <Badge className="bg-red-100 text-red-800">Inactive</Badge>;
@@ -466,22 +524,28 @@ export default function CodesPage() {
                         Copy URL
                       </DropdownMenuItem>
                       <DropdownMenuItem
+                        onClick={() => handleCopyQRImage(qrCode)}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy Image URL
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         onClick={() => handleDuplicateQRCode(qrCode)}
                       >
                         <Copy className="mr-2 h-4 w-4" />
                         Duplicate
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/l/${qrCode.shortCode}`}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </Link>
+                      <DropdownMenuItem
+                        onClick={() => handleViewQRCode(qrCode)}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        View
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/generate?edit=${qrCode.id}`}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </Link>
+                      <DropdownMenuItem
+                        onClick={() => handleEditQRCode(qrCode)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleDeleteQRCode(qrCode)}
@@ -507,9 +571,7 @@ export default function CodesPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Scans</span>
-                    <span className="font-medium">
-                      {qrCode.scansCount || 0}
-                    </span>
+                    <span className="font-medium">{qrCode.scanCount || 0}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Created</span>
@@ -570,7 +632,7 @@ export default function CodesPage() {
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <BarChart3 className="text-muted-foreground h-4 w-4" />
-                        <span>{qrCode.scansCount || 0}</span>
+                        <span>{qrCode.scanCount || 0}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -591,22 +653,28 @@ export default function CodesPage() {
                             Copy URL
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onClick={() => handleCopyQRImage(qrCode)}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy Image URL
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => handleDuplicateQRCode(qrCode)}
                           >
                             <Copy className="mr-2 h-4 w-4" />
                             Duplicate
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/l/${qrCode.shortCode}`}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View
-                            </Link>
+                          <DropdownMenuItem
+                            onClick={() => handleViewQRCode(qrCode)}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/generate?edit=${qrCode.id}`}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </Link>
+                          <DropdownMenuItem
+                            onClick={() => handleEditQRCode(qrCode)}
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleDeleteQRCode(qrCode)}
@@ -680,6 +748,19 @@ export default function CodesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* QR Code Update Modal */}
+      <QRCodeUpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => {
+          setIsUpdateModalOpen(false);
+          setUpdatingQRCode(null);
+        }}
+        qrCode={updatingQRCode}
+        onUpdate={() => {
+          refetch();
+        }}
+      />
     </div>
   );
 }

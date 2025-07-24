@@ -94,7 +94,7 @@ export async function GET(
       return NextResponse.redirect(landingPageUrl, { status: 302 });
     } else {
       // For other QR code types, use the existing redirect logic
-      const redirectUrl = await getRedirectUrl(result.qrCode.type as QRCodeType, result.originalData);
+      const redirectUrl = await getRedirectUrl(result.qrCode.type as QRCodeType, result.originalData, shortCode);
       return NextResponse.redirect(redirectUrl, { status: 302 });
     }
     
@@ -340,16 +340,13 @@ async function updateRedirectTracking(shortCode: string, updates: any): Promise<
 /**
  * Get redirect URL based on QR code type
  */
-async function getRedirectUrl(qrType: QRCodeType, originalData: any): Promise<string> {
+async function getRedirectUrl(qrType: QRCodeType, originalData: any, shortCode: string): Promise<string> {
   switch (qrType) {
     case "url":
       return originalData.url || "https://example.com";
     case "vcard":
-      // For vCard, we might redirect to a contact page or return the vCard data
-      return `data:text/vcard;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;
-    case "wifi":
-      // For WiFi, we might redirect to a page with connection instructions
-      return `data:text/plain;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;
+      // Redirect to business card landing page
+      return `${process.env.NEXT_PUBLIC_BASE_URL}/card/${shortCode}`;
     default:
       // For other types, convert to appropriate format
       return `data:text/plain;charset=utf-8,${encodeURIComponent(convertDataToQRString(qrType, originalData))}`;

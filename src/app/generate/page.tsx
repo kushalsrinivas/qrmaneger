@@ -6,7 +6,9 @@ import {
   useMemo,
   createContext,
   useContext,
+  useEffect,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -30,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { QRCodeGenerator } from "@/components/qr-code-generator";
 import { QRCodeCustomizer } from "@/components/qr-code-customizer";
+import { BusinessCardForm } from "@/components/business-card-form";
 import {
   ArrowLeft,
   ArrowRight,
@@ -54,6 +57,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/trpc/react";
 
 // ===== TYPE DEFINITIONS =====
 interface QRLink {
@@ -218,6 +222,8 @@ interface FormContextType {
   formData: Partial<FormData>;
   customization: QRCustomization;
   errors: string[];
+  isEditMode: boolean;
+  editQRCodeId: string | null;
 
   // Actions
   setCurrentStep: (step: number) => void;
@@ -500,6 +506,9 @@ const validateStep4 = (data: Partial<FormData>): string[] => {
 const FormProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const searchParams = useSearchParams();
+  const editQRCodeId = searchParams.get("edit");
+
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedType, setSelectedType] = useState("");
   const [isDynamic, setIsDynamic] = useState(true);
@@ -513,6 +522,10 @@ const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     logoUrl: "",
     logoSize: 20,
   });
+
+  // Fetch QR code data for editing
+  const { data: editQRCode, isLoading: isLoadingEdit } =
+    api.qr.getById.useQuery({ id: editQRCodeId! }, { enabled: !!editQRCodeId });
 
   const updateFormData = useCallback((data: Partial<FormData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
@@ -558,6 +571,36 @@ const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, []);
 
+  // Load QR code data for editing
+  useEffect(() => {
+    if (editQRCode && !isLoadingEdit) {
+      setSelectedType(editQRCode.type);
+      setIsDynamic(editQRCode.isDynamic);
+
+      // Set form data based on QR code type and data
+      if (editQRCode.type === "url" && editQRCode.data?.url) {
+        setFormData({ url: editQRCode.data.url, name: editQRCode.name });
+      }
+
+      // Set customization
+      if (editQRCode.style) {
+        setCustomization({
+          size: editQRCode.size ?? 512,
+          errorCorrection:
+            (editQRCode.errorCorrection as "L" | "M" | "Q" | "H") ?? "M",
+          foregroundColor: editQRCode.style.foregroundColor ?? "#000000",
+          backgroundColor: editQRCode.style.backgroundColor ?? "#ffffff",
+          cornerStyle: editQRCode.style.cornerStyle ?? "square",
+          logoUrl: editQRCode.style.logoUrl ?? "",
+          logoSize: editQRCode.style.logoSize ?? 20,
+        });
+      }
+
+      // Skip to step 2 since type is already selected
+      setCurrentStep(2);
+    }
+  }, [editQRCode, isLoadingEdit]);
+
   const errors = useMemo(() => {
     return validateFormData(selectedType, formData);
   }, [selectedType, formData]);
@@ -569,11 +612,18 @@ const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     formData,
     customization,
     errors,
+    isEditMode: !!editQRCodeId,
+    editQRCodeId,
     setCurrentStep,
-    setSelectedType: useCallback((type: string) => {
-      setSelectedType(type);
-      setFormData({}); // Reset form data when type changes
-    }, []),
+    setSelectedType: useCallback(
+      (type: string) => {
+        setSelectedType(type);
+        if (!editQRCodeId) {
+          setFormData({}); // Reset form data when type changes (but not in edit mode)
+        }
+      },
+      [editQRCodeId],
+    ),
     setIsDynamic,
     updateFormData,
     updateCustomization,
@@ -804,82 +854,11 @@ const ContentInputStep: React.FC = () => {
         );
 
       case "vcard":
-        const vcard = formData as VCardFormData;
         return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="firstName">First Name *</Label>
-                <Input
-                  id="firstName"
-                  placeholder="John"
-                  value={vcard.firstName ?? ""}
-                  onChange={(e) =>
-                    updateFormData({ firstName: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="lastName">Last Name *</Label>
-                <Input
-                  id="lastName"
-                  placeholder="Doe"
-                  value={vcard.lastName ?? ""}
-                  onChange={(e) => updateFormData({ lastName: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="organization">Organization</Label>
-              <Input
-                id="organization"
-                placeholder="Company Name"
-                value={vcard.organization ?? ""}
-                onChange={(e) =>
-                  updateFormData({ organization: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                placeholder="Job Title"
-                value={vcard.title ?? ""}
-                onChange={(e) => updateFormData({ title: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  placeholder="+1234567890"
-                  value={vcard.phone ?? ""}
-                  onChange={(e) => updateFormData({ phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="john@example.com"
-                  value={vcard.email ?? ""}
-                  onChange={(e) => updateFormData({ email: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="website">Website</Label>
-              <Input
-                id="website"
-                placeholder="https://example.com"
-                value={vcard.website ?? ""}
-                onChange={(e) => updateFormData({ website: e.target.value })}
-              />
-            </div>
-          </div>
+          <BusinessCardForm
+            value={formData as any}
+            onChange={(data) => updateFormData(data)}
+          />
         );
 
       case "wifi":
@@ -1021,8 +1000,15 @@ const CustomizationStep: React.FC = () => {
 
 // Step 4: Preview & Generate
 const PreviewStep: React.FC = () => {
-  const { selectedType, isDynamic, formData, customization, updateFormData } =
-    useFormContext();
+  const {
+    selectedType,
+    isDynamic,
+    formData,
+    customization,
+    updateFormData,
+    isEditMode,
+    editQRCodeId,
+  } = useFormContext();
   const [shouldGenerate, setShouldGenerate] = useState(false);
   const [tags, setTags] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
@@ -1242,7 +1228,7 @@ const PreviewStep: React.FC = () => {
                 size="lg"
               >
                 <Check className="mr-2 h-4 w-4" />
-                Save QR Code
+                {isEditMode ? "Update QR Code" : "Save QR Code"}
               </Button>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1280,7 +1266,8 @@ const PreviewStep: React.FC = () => {
 
 // ===== MAIN COMPONENT =====
 const MultiStepForm: React.FC = () => {
-  const { currentStep, setCurrentStep, validateStep } = useFormContext();
+  const { currentStep, setCurrentStep, validateStep, isEditMode } =
+    useFormContext();
 
   const steps: FormStep[] = [
     {
@@ -1346,10 +1333,14 @@ const MultiStepForm: React.FC = () => {
       <div className="mb-8">
         <div className="mb-4 flex items-center gap-2">
           <ArrowLeft className="text-muted-foreground hover:text-foreground h-5 w-5 cursor-pointer" />
-          <h1 className="text-3xl font-bold">Create QR Code</h1>
+          <h1 className="text-3xl font-bold">
+            {isEditMode ? "Edit QR Code" : "Create QR Code"}
+          </h1>
         </div>
         <p className="text-muted-foreground">
-          Follow the steps to create your perfect QR code
+          {isEditMode
+            ? "Update your QR code settings and design"
+            : "Follow the steps to create your perfect QR code"}
         </p>
       </div>
 

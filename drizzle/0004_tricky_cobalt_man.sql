@@ -1,0 +1,1 @@
+ALTER TYPE "public"."qr_code_type" ADD VALUE 'vcard';

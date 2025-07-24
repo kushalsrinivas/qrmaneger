@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Download, Share2, Copy, Loader2 } from "lucide-react";
 import { api } from "@/trpc/react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface QRCodeGeneratorProps {
   data: any;
@@ -52,24 +53,41 @@ export function QRCodeGenerator({
   options = {},
   metadata = {},
 }: QRCodeGeneratorProps) {
+  const router = useRouter();
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
   const [shortUrl, setShortUrl] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedQRCode, setGeneratedQRCode] = useState<any>(null);
 
-  const generateQRMutation = api.qr.generate.useMutation({
+  const generateQRMutation = api.qr.create.useMutation({
     onSuccess: (result) => {
       setQrCodeUrl(result.qrCodeUrl);
       setShortUrl(result.shortUrl || "");
       setGeneratedQRCode(result);
       setIsGenerating(false);
-      toast.success("QR code generated successfully!");
+      toast.success("QR code created successfully!");
       onGenerationComplete?.();
+
+      // Redirect to codes page after successful generation
+      setTimeout(() => {
+        router.push("/codes");
+      }, 1500);
     },
     onError: (error) => {
       console.error("QR generation failed:", error);
       setIsGenerating(false);
-      toast.error(error.message || "Failed to generate QR code");
+      toast.error(error.message || "Failed to create QR code");
+    },
+  });
+
+  const updateDynamicQRMutation = api.qr.updateDynamic.useMutation({
+    onSuccess: () => {
+      toast.success("Dynamic QR code updated successfully!");
+      onGenerationComplete?.();
+    },
+    onError: (error) => {
+      console.error("Dynamic QR update failed:", error);
+      toast.error(error.message || "Failed to update dynamic QR code");
     },
   });
 
@@ -150,20 +168,27 @@ export function QRCodeGenerator({
 
   const downloadQR = (format: string = "png") => {
     if (qrCodeUrl) {
-      const link = document.createElement("a");
-      link.download = `qr-code-${type}.${format}`;
-      link.href = qrCodeUrl;
-      link.click();
+      try {
+        const link = document.createElement("a");
+        link.download = `qr-code-${type}.${format}`;
+        link.href = qrCodeUrl;
+        link.click();
+        toast.success(`QR code downloaded as ${format.toUpperCase()}!`);
+      } catch (error) {
+        toast.error(`Failed to download QR code`);
+      }
+    } else {
+      toast.error("QR code not ready for download");
     }
   };
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (text: string, type: string = "text") => {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard!");
+      toast.success(`${type} copied to clipboard!`);
     } catch (error) {
       console.error("Failed to copy:", error);
-      toast.error("Failed to copy to clipboard");
+      toast.error(`Failed to copy ${type.toLowerCase()} to clipboard`);
     }
   };
 
@@ -177,10 +202,10 @@ export function QRCodeGenerator({
         });
       } catch (error) {
         console.error("Failed to share:", error);
-        copyToClipboard(shortUrl || qrCodeUrl);
+        copyToClipboard(shortUrl || qrCodeUrl, "QR code URL");
       }
     } else {
-      copyToClipboard(shortUrl || qrCodeUrl);
+      copyToClipboard(shortUrl || qrCodeUrl, "QR code URL");
     }
   };
 

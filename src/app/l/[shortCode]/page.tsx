@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { qrCodes, analyticsEvents } from "@/server/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { MultiUrlLandingPage } from "@/components/multi-url-landing-page";
+import { BusinessCardLanding } from "@/components/business-card-landing";
 import { SocialMediaService } from "@/lib/social-media-service";
 import { rateLimitingService } from "@/lib/rate-limiting";
 import { headers } from "next/headers";

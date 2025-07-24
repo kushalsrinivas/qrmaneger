@@ -5,7 +5,7 @@ import {
   publicProcedure 
 } from "@/server/api/trpc";
 import { qrCodes, analyticsEvents } from "@/server/db/schema";
-import { 
+import type { 
   QRCodeGenerationRequest, 
   QRCodeData, 
   QRCodeType, 
@@ -25,10 +25,7 @@ import { TRPCError } from "@trpc/server";
 // ================================
 
 const qrCodeGenerationSchema = z.object({
-  type: z.enum([
-    "url", "vcard", "wifi", "text", "sms", "email", "phone", "location", 
-    "event", "app_download", "multi_url", "menu", "payment", "pdf", "image", "video"
-  ]),
+  type: z.enum(["url", "vcard"]), // URL and vCard types supported
   mode: z.enum(["static", "dynamic"]),
   data: z.any(), // This will be validated by the service layer
   options: z.object({
@@ -104,16 +101,16 @@ const qrCodeAnalyticsSchema = z.object({
 
 export const qrRouter = createTRPCRouter({
   /**
-   * Generate a single QR code
+   * Create/Generate a single QR code (supports both new creation and duplication)
    */
-  generate: protectedProcedure
+  create: protectedProcedure
     .input(qrCodeGenerationSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       
       try {
         // Validate the QR code data
-        const validation = validateQRCodeData(input.type, input.data);
+        const validation = validateQRCodeData(input.type, input.data as QRCodeData);
         if (!validation.isValid) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -122,7 +119,64 @@ export const qrRouter = createTRPCRouter({
         }
         
         // Generate the QR code
-        const result = await qrCodeService.generateQRCode(input, userId);
+        const result = await qrCodeService.generateQRCode(input as QRCodeGenerationRequest, userId);
+        
+        // Store in database
+        const qrCodeRecord = await ctx.db.insert(qrCodes).values({
+          id: result.id,
+          name: input.metadata?.name || `QR Code - ${input.type}`,
+          description: input.metadata?.description,
+          type: input.type,
+          isDynamic: input.mode === "dynamic",
+          data: input.data as QRCodeData,
+          style: input.options.customization,
+          size: input.options.size,
+          format: input.options.format,
+          errorCorrection: input.options.errorCorrection,
+          imageUrl: result.qrCodeUrl,
+          imageSize: result.metadata.fileSize,
+          folderId: input.metadata?.folderId,
+          templateId: input.metadata?.templateId,
+          tags: input.metadata?.tags,
+          userId,
+          expiresAt: input.metadata?.expiresAt,
+          dynamicUrl: result.shortUrl,
+        }).returning();
+        
+        return {
+          ...result,
+          qrCode: qrCodeRecord[0],
+        };
+        
+      } catch (error) {
+        console.error("QR code generation failed:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error instanceof Error ? error.message : "QR code generation failed",
+        });
+      }
+    }),
+
+  /**
+   * Generate a single QR code (alias for create for backward compatibility)
+   */
+  generate: protectedProcedure
+    .input(qrCodeGenerationSchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      
+      try {
+        // Validate the QR code data
+        const validation = validateQRCodeData(input.type, input.data as QRCodeData);
+        if (!validation.isValid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Validation failed: ${validation.errors.join(", ")}`,
+          });
+        }
+        
+        // Generate the QR code
+        const result = await qrCodeService.generateQRCode(input as QRCodeGenerationRequest, userId);
         
         // Store in database
         const qrCodeRecord = await ctx.db.insert(qrCodes).values({
@@ -170,7 +224,7 @@ export const qrRouter = createTRPCRouter({
       
       try {
         const result = await batchQRService.generateBatch(
-          input.requests,
+          input.requests as QRCodeGenerationRequest[],
           userId,
           input.options
         );
@@ -670,6 +724,10 @@ export const qrRouter = createTRPCRouter({
       return {
         totalQRCodes: totalQRCodes[0]?.count || 0,
         totalScans: totalScans[0]?.totalScans || 0,
+        activeQRCodes: totalQRCodes[0]?.count || 0, // All QR codes are considered active for now
+        averageScansPerQR: totalQRCodes[0]?.count > 0 
+          ? Math.round((totalScans[0]?.totalScans || 0) / totalQRCodes[0].count) 
+          : 0,
         qrCodesByType: qrCodesByType,
         recentActivity: recentActivity,
       };
