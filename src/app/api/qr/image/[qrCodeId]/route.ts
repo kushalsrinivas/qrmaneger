@@ -12,11 +12,14 @@ import QRCode from "qrcode";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { qrCodeId: string } }
+  { params }: { params: Promise<{ qrCodeId: string }> }
 ) {
   try {
+    // Await the params since it's a Promise in Next.js 15
+    const resolvedParams = await params;
+    
     // Extract qrCodeId and format from the filename
-    const filename = params.qrCodeId;
+    const filename = resolvedParams.qrCodeId;
     const parts = filename.split('.');
     const qrCodeId = parts[0];
     const format = parts[1] || 'png';

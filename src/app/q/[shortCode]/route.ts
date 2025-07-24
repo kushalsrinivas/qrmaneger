@@ -7,6 +7,7 @@ import { analyticsEvents, redirects } from "@/server/db/schema";
 import type { QRCodeType } from "@/server/db/types";
 import { nanoid } from "nanoid";
 import { eq, sql } from "drizzle-orm";
+import crypto from "crypto";
 
 /**
  * Handles QR code redirect requests with comprehensive tracking
@@ -14,14 +15,15 @@ import { eq, sql } from "drizzle-orm";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { shortCode: string } }
+  { params }: { params: Promise<{ shortCode: string }> }
 ) {
-  const { shortCode } = params;
+  const resolvedParams = await params;
+  const { shortCode } = resolvedParams;
   
   try {
     // Extract client information
-    const userAgent = request.headers.get("user-agent") || "";
-    const referer = request.headers.get("referer") || "";
+    const userAgent = request.headers.get("user-agent") ?? "";
+    const referer = request.headers.get("referer") ?? "";
     const ipAddress = getClientIP(request);
     
     // Rate limiting check
@@ -63,11 +65,11 @@ export async function GET(
     const sessionId = generateSessionId(ipAddress, userAgent);
     
     // Check if this is a unique visitor
-    const isUniqueVisitor = await checkUniqueVisitor(result.qrCode.id, sessionId);
+    const isUniqueVisitor = await checkUniqueVisitor(result.qrCode.id as string, sessionId);
     
     // Record comprehensive analytics event
     await recordAnalyticsEvent({
-      qrCodeId: result.qrCode.id,
+      qrCodeId: result.qrCode.id as string,
       eventType: "scan",
       userAgent,
       referer,
@@ -85,16 +87,16 @@ export async function GET(
     });
     
     // Increment scan count on QR code
-    await shortUrlService.incrementScanCount(result.qrCode.id);
+    await shortUrlService.incrementScanCount(result.qrCode.id as string);
     
     // Handle different QR code types
-    if (result.qrCode.type === "multi_url") {
+    if ((result.qrCode.type as string) === "multi_url") {
       // For multi-URL QR codes, redirect to the landing page
       const landingPageUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/l/${shortCode}`;
       return NextResponse.redirect(landingPageUrl, { status: 302 });
     } else {
       // For other QR code types, use the existing redirect logic
-      const redirectUrl = await getRedirectUrl(result.qrCode.type as QRCodeType, result.originalData, shortCode);
+      const redirectUrl = await getRedirectUrl(result.qrCode.type as QRCodeType, result.originalData as any, shortCode);
       return NextResponse.redirect(redirectUrl, { status: 302 });
     }
     
@@ -118,7 +120,7 @@ function getClientIP(request: NextRequest): string {
   const cfConnectingIP = request.headers.get("cf-connecting-ip");
   
   if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "127.0.0.1";
+    return forwardedFor.split(",")[0]?.trim() ?? "127.0.0.1";
   }
   
   if (realIP) {
@@ -174,20 +176,20 @@ function parseUserAgent(userAgent: string): {
   
   if (ua.includes("chrome")) {
     browser = "Chrome";
-    const match = ua.match(/chrome\/([0-9.]+)/);
-    version = match ? match[1] : "Unknown";
+    const match = /chrome\/([0-9.]+)/.exec(ua) ?? [];
+    version = match?.[1] ?? "Unknown";
   } else if (ua.includes("firefox")) {
     browser = "Firefox";
-    const match = ua.match(/firefox\/([0-9.]+)/);
-    version = match ? match[1] : "Unknown";
+    const match = /firefox\/([0-9.]+)/.exec(ua) ?? [];
+    version = match?.[1] ?? "Unknown";
   } else if (ua.includes("safari")) {
     browser = "Safari";
-    const match = ua.match(/version\/([0-9.]+)/);
-    version = match ? match[1] : "Unknown";
+    const match = /version\/([0-9.]+)/.exec(ua) ?? [];
+    version = match?.[1] ?? "Unknown";
   } else if (ua.includes("edge")) {
     browser = "Edge";
-    const match = ua.match(/edge\/([0-9.]+)/);
-    version = match ? match[1] : "Unknown";
+    const match = /edge\/([0-9.]+)/.exec(ua) ?? [];
+    version = match?.[1] ?? "Unknown";
   }
   
   return { type, os, browser, version };
@@ -250,7 +252,7 @@ async function getLocationFromIP(ipAddress: string): Promise<{
  * Generate session ID for tracking
  */
 function generateSessionId(ipAddress: string, userAgent: string): string {
-  const crypto = require("crypto");
+
   const data = `${ipAddress}-${userAgent}-${Date.now()}`;
   return crypto.createHash("sha256").update(data).digest("hex").substring(0, 32);
 }

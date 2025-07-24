@@ -70,9 +70,28 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { QRCodeUpdateModal } from "@/components/qr-code-update-modal";
 
+type QRCodeFilterType =
+  | "all"
+  | "url"
+  | "vcard"
+  | "wifi"
+  | "text"
+  | "sms"
+  | "email"
+  | "phone"
+  | "location"
+  | "event"
+  | "app_download"
+  | "multi_url"
+  | "menu"
+  | "payment"
+  | "pdf"
+  | "image"
+  | "video";
+
 export default function CodesPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedType, setSelectedType] = useState("all");
+  const [selectedType, setSelectedType] = useState<QRCodeFilterType>("all");
   const [selectedFolder, setSelectedFolder] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -398,7 +417,7 @@ export default function CodesPage() {
             className="pl-10"
           />
         </div>
-        <Select value={selectedType} onValueChange={setSelectedType}>
+        <Select value={selectedType} onValueChange={(value) => setSelectedType(value as QRCodeFilterType)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="All Types" />
           </SelectTrigger>

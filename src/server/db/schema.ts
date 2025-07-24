@@ -25,7 +25,8 @@ export const createTable = pgTableCreator((name) => `mojoqr_${name}`);
 // Enums
 export const userRoleEnum = pgEnum("user_role", ["admin", "team_lead", "member", "viewer"]);
 export const qrCodeTypeEnum = pgEnum("qr_code_type", [
-  "url", "vcard"
+  "url", "vcard", "wifi", "text", "sms", "email", "phone", "location", 
+  "event", "app_download", "multi_url", "menu", "payment", "pdf", "image", "video"
 ]);
 export const qrCodeStatusEnum = pgEnum("qr_code_status", ["active", "inactive", "expired", "archived"]);
 export const analyticsEventTypeEnum = pgEnum("analytics_event_type", [
@@ -265,10 +266,14 @@ export const qrCodes = createTable(
     staticContent: d.text(), // For static QR codes
     dynamicUrl: d.varchar({ length: 500 }), // Short URL for dynamic QR codes
     originalUrl: d.varchar({ length: 2000 }), // Original URL for dynamic QR codes
-    // QR Code data - URL and vCard types supported
+    // QR Code data - supports all QR code types
     data: d.jsonb().$type<{
       // URL type
       url?: string;
+      // Text type
+      text?: string;
+      // Phone type
+      phone?: string;
       // vCard type - comprehensive business card data
       vcard?: {
         // Basic information
@@ -326,6 +331,82 @@ export const qrCodes = createTable(
         assistantPhone?: string;
         companyLogo?: string;
       };
+      // Multi-URL type - comprehensive landing page data
+      multiUrl?: {
+        // Basic Information
+        title?: string;
+        description?: string;
+        bio?: string;
+        
+        // Profile Information
+        profileImage?: string;
+        profileName?: string;
+        profileTitle?: string;
+        
+        // Links
+        links: Array<{
+          id: string;
+          title: string;
+          url: string;
+          description?: string;
+          icon?: string;
+          iconType?: "emoji" | "image" | "platform";
+          platform?: string;
+          
+          // Link Styling
+          backgroundColor?: string;
+          textColor?: string;
+          borderColor?: string;
+          borderRadius?: number;
+          
+          // Link Scheduling
+          isActive?: boolean;
+          scheduledStart?: string;
+          scheduledEnd?: string;
+          timezone?: string;
+          
+          // Link Analytics
+          clickCount?: number;
+          lastClicked?: string;
+          
+          // Link Type
+          linkType?: "standard" | "social" | "email" | "phone" | "app" | "file" | "contact";
+          
+          // Additional metadata
+          metadata?: {
+            subject?: string;
+            body?: string;
+            downloadFilename?: string;
+            appStoreUrl?: string;
+            playStoreUrl?: string;
+          };
+        }>;
+        
+        // Theme and Branding
+        theme?: Record<string, any>;
+        
+        // SEO and Social Media
+        seo?: Record<string, any>;
+        socialMedia?: Record<string, any>;
+        
+        // Advanced Features
+        features?: Record<string, any>;
+        
+        // Analytics
+        analytics?: Record<string, any>;
+      };
+      // Additional QR code types can be added here
+      wifi?: Record<string, any>;
+      sms?: Record<string, any>;
+      email?: Record<string, any>;
+      location?: Record<string, any>;
+      event?: Record<string, any>;
+      appDownload?: Record<string, any>;
+      menu?: Record<string, any>;
+      payment?: Record<string, any>;
+      pdf?: Record<string, any>;
+      image?: Record<string, any>;
+      video?: Record<string, any>;
     }>(),
     // Visual customization
     style: d.jsonb().$type<{

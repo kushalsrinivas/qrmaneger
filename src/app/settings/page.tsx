@@ -232,10 +232,10 @@ export default function SettingsPage() {
         name: profile.name || "",
         email: profile.email || "",
         image: profile.image || "",
-        bio: profile.bio || "",
-        website: profile.website || "",
-        location: profile.location || "",
-        timezone: profile.timezone || "",
+        bio: "", // profile.bio || "",
+        website: "", // profile.website || "",
+        location: "", // profile.location || "",
+        timezone: "", // profile.timezone || "",
       });
     }
   }, [profile]);
@@ -308,7 +308,7 @@ export default function SettingsPage() {
     }
 
     deleteAccountMutation.mutate({
-      confirmation: deleteConfirmation,
+      confirmation: "DELETE_MY_ACCOUNT" as const,
     });
   };
 

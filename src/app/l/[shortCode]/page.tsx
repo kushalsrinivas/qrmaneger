@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { db } from "@/server/db";
 import { qrCodes, analyticsEvents } from "@/server/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -11,9 +11,9 @@ import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     shortCode: string;
-  };
+  }>;
 }
 
 // ================================
@@ -23,7 +23,8 @@ interface PageProps {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const { shortCode } = params;
+  const resolvedParams = await params;
+  const { shortCode } = resolvedParams;
 
   // Get QR code data
   const qrCode = await db.query.qrCodes.findFirst({
@@ -33,14 +34,14 @@ export async function generateMetadata({
     ),
   });
 
-  if (!qrCode || qrCode.type !== "multi_url" || !qrCode.data?.multiUrl) {
+  if (!qrCode || (qrCode.type as string) !== "multi_url" || !qrCode.data?.multiUrl) {
     return {
       title: "Not Found",
       description: "The requested page could not be found.",
     };
   }
 
-  const multiUrlData = qrCode.data.multiUrl;
+  const multiUrlData = qrCode.data.multiUrl as any;
   const seo = multiUrlData.seo;
 
   // Default metadata
@@ -126,11 +127,11 @@ export async function generateMetadata({
 async function trackPageView(qrCodeId: string, request: Request) {
   try {
     const headersList = headers();
-    const userAgent = headersList.get("user-agent") || "";
-    const referer = headersList.get("referer") || "";
+    const userAgent = headersList.get("user-agent") ?? "";
+    const referer = headersList.get("referer") ?? "";
     const ipAddress =
-      headersList.get("x-forwarded-for") ||
-      headersList.get("x-real-ip") ||
+      headersList.get("x-forwarded-for") ??
+      headersList.get("x-real-ip") ??
       "unknown";
 
     // Generate session ID
@@ -230,7 +231,8 @@ async function getLocationFromIP(ipAddress: string) {
 // ================================
 
 export default async function MultiUrlLandingPageRoute({ params }: PageProps) {
-  const { shortCode } = params;
+  const resolvedParams = await params;
+  const { shortCode } = resolvedParams;
 
   try {
     // Get QR code data
@@ -367,7 +369,7 @@ export default async function MultiUrlLandingPageRoute({ params }: PageProps) {
         const updatedData = { ...qrCode.data };
         if (updatedData.multiUrl?.links) {
           const linkIndex = updatedData.multiUrl.links.findIndex(
-            (l) => l.id === linkId,
+            (l: any) => l.id === linkId,
           );
           if (linkIndex !== -1) {
             updatedData.multiUrl.links[linkIndex].clickCount =

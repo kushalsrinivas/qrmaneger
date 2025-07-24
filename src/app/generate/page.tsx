@@ -406,21 +406,9 @@ const validateFormData = (type: string, data: Partial<FormData>): string[] => {
         errors.push("First name and last name are required");
       }
       break;
-    case "wifi":
-      const wifi = data as WifiFormData;
-      if (!wifi.ssid || !wifi.security) {
-        errors.push("Network name and security type are required");
-      }
-      if (wifi.security !== "nopass" && !wifi.password) {
-        errors.push("Password is required for secured networks");
-      }
-      break;
-    case "sms":
-      const sms = data as SmsFormData;
-      if (!sms.phone || !sms.message) {
-        errors.push("Phone number and message are required");
-      }
-      break;
+
+
+      
     case "email":
       const email = data as EmailFormData;
       if (!email.to) {

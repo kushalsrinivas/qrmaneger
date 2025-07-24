@@ -110,6 +110,45 @@ const exportDataSchema = z.object({
 // ================================
 
 export const settingsRouter = createTRPCRouter({
+  // Get security settings
+  getSecurity: protectedProcedure
+    .query(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+      
+      const user = await ctx.db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found",
+        });
+      }
+
+      return {
+        twoFactorEnabled: false, // TODO: Implement 2FA
+        sessionTimeout: 30,
+        loginNotifications: true,
+        apiAccess: false,
+        dataRetention: 90,
+      };
+    }),
+
+  // Update security settings
+  updateSecurity: protectedProcedure
+    .input(updateSecuritySchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      
+      // TODO: Implement security settings update logic
+      console.log("Security settings update for user:", userId, input);
+      
+      return {
+        success: true,
+        message: "Security settings updated successfully",
+      };
+    }),
   /**
    * Get user profile
    */

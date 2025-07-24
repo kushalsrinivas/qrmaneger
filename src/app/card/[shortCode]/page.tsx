@@ -1,15 +1,16 @@
 import { notFound } from "next/navigation";
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { db } from "@/server/db";
 import { qrCodes, analyticsEvents } from "@/server/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { BusinessCardLanding } from "@/components/business-card-landing";
 import { headers } from "next/headers";
+import crypto from "crypto";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     shortCode: string;
-  };
+  }>;
 }
 
 // ================================
@@ -19,7 +20,8 @@ interface PageProps {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const { shortCode } = params;
+  const resolvedParams = await params;
+  const { shortCode } = resolvedParams;
 
   // Get QR code data
   const qrCode = await db.query.qrCodes.findFirst({
@@ -97,12 +99,12 @@ export async function generateMetadata({
 
 async function trackPageView(qrCodeId: string) {
   try {
-    const headersList = headers();
-    const userAgent = headersList.get("user-agent") || "";
-    const referer = headersList.get("referer") || "";
+    const headersList = await headers();
+    const userAgent = headersList.get("user-agent") ?? "";
+    const referer = headersList.get("referer") ?? "";
     const ipAddress =
-      headersList.get("x-forwarded-for") ||
-      headersList.get("x-real-ip") ||
+      headersList.get("x-forwarded-for") ??
+      headersList.get("x-real-ip") ??
       "unknown";
 
     // Generate session ID
@@ -147,7 +149,7 @@ async function trackPageView(qrCodeId: string) {
 // ================================
 
 function generateSessionId(ipAddress: string, userAgent: string): string {
-  const hash = require("crypto")
+  const hash = crypto
     .createHash("sha256")
     .update(ipAddress + userAgent + new Date().toDateString())
     .digest("hex");
@@ -185,7 +187,8 @@ function parseUserAgent(userAgent: string) {
 // ================================
 
 export default async function BusinessCardPage({ params }: PageProps) {
-  const { shortCode } = params;
+  const resolvedParams = await params;
+  const { shortCode } = resolvedParams;
 
   try {
     // Get QR code data

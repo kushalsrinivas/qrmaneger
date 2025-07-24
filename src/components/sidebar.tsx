@@ -25,7 +25,7 @@ const navigation = [
   { name: "My QR Codes", href: "/codes", icon: QrCode },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Templates", href: "/templates", icon: FileText },
-  { name: "Bulk Upload", href: "/bulk", icon: Download },
+
 
   { name: "Settings", href: "/settings", icon: Settings },
 ];
